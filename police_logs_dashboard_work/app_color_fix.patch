@@ -1,0 +1,70 @@
+# app_color_fix.patch
+#
+# Problem: the "Incidents per Day" chart with nature breakdown was cycling through
+# Plotly's Safe palette (~11 colors) across 27+ grouped_nature categories, causing
+# multiple categories to share the same color.
+#
+# Fix: replace the index-based palette lookup with a hash of the category name so
+# every nature gets a unique, deterministic color regardless of how many there are.
+# Colors are stable across data refreshes (same name always = same color).
+#
+# To apply: git apply app_color_fix.patch  (from the repo root)
+
+--- a/app.py
++++ b/app.py
+@@ -1,7 +1,7 @@
+ import pandas as pd
+-import plotly.express as px
++import hashlib
++import plotly.express as px
++import plotly.graph_objects as go
+ import pydeck as pdk
+ import streamlit as st
+
+ st.set_page_config(page_title="Police Incidents", layout="wide")
+
+ DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+-SAFE_COLORS = px.colors.qualitative.Safe
+
+
+ def _to_rgb(c):
+@@ -11,6 +11,19 @@ def _to_rgb(c):
+     return [int(x) for x in c[4:-1].split(",")]
+
+
++def _nature_color_hex(name: str) -> str:
++    # Hash the name so each category always gets the same color, even across refreshes
++    digest = hashlib.md5(name.encode()).hexdigest()
++    r = int(digest[0:2], 16)
++    g = int(digest[2:4], 16)
++    b = int(digest[4:6], 16)
++    # Blend toward mid-range to avoid colors that are too dark or too washed out
++    r = int(r * 0.6 + 60)
++    g = int(g * 0.6 + 60)
++    b = int(b * 0.6 + 60)
++    return f"#{r:02x}{g:02x}{b:02x}"
++
++
+ @st.cache_data(ttl=3600)
+ def load():
+     try:
+@@ -22,7 +35,7 @@ def load():
+     df["dow"] = df["reported"].dt.day_name()
+     natures = sorted(df["grouped_nature"].dropna().unique())
+-    color_map = {n: _to_rgb(SAFE_COLORS[i % len(SAFE_COLORS)]) for i, n in enumerate(natures)}
++    color_map = {n: _to_rgb(_nature_color_hex(n)) for n in natures}
+     return df, natures, color_map
+
+
+@@ -79,8 +92,9 @@ if st.toggle("Nature breakdown"):
+     daily = fdf.groupby(["log_date", "grouped_nature"]).size().reset_index(name="count")
++    nature_color_map = {n: _nature_color_hex(n) for n in daily["grouped_nature"].unique()}
+     fig = px.bar(
+         daily,
+         x="log_date",
+         y="count",
+         color="grouped_nature",
+-        color_discrete_sequence=SAFE_COLORS,
++        color_discrete_map=nature_color_map,
+         labels={"log_date": "Date", "count": "Incidents", "grouped_nature": "Nature"},
+     )
