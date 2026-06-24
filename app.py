@@ -2,6 +2,9 @@ import pandas as pd
 import plotly.express as px
 import pydeck as pdk
 import streamlit as st
+from datetime import date
+from dateutil.relativedelta import relativedelta
+
 
 st.set_page_config(page_title="Police Incidents", layout="wide")
 
@@ -36,13 +39,22 @@ min_date, max_date = df["log_date"].min().date(), df["log_date"].max().date()
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
-date_range = st.sidebar.date_input("Date range", (min_date, max_date), min_value=min_date, max_value=max_date)
+# set start date to first day of last month
+# set end date to last day of last month
+today = date.today()
+filter_start = today.replace(day=1) - relativedelta(months=1)
+filter_end = today.replace(day=1) - relativedelta(days=2)
+
+date_range = st.sidebar.date_input("Date range", (filter_start, filter_end), min_value=min_date, max_value=max_date)
 selected = st.sidebar.multiselect("Nature", natures, default=natures)
+
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 fdf = df[df["log_date"].dt.date.between(start, end) & df["grouped_nature"].isin(selected)]
 
-st.title(f"La Verne Police Incidents — {len(fdf):,} records")
+st.title(f"La Verne Police Incidents")
+st.subheader(f"{filter_start.strftime('%B %d')} to {filter_end.strftime('%B %d %Y')}: {len(fdf):,} reports")
+st.divider()
 
 # ── Map ────────────────────────────────────────────────────────────────────────
 if "lat" in fdf.columns and fdf["lat"].notna().any():
@@ -62,7 +74,7 @@ if "lat" in fdf.columns and fdf["lat"].notna().any():
                     pickable=True,
                 )
             ],
-            tooltip={"text": "{grouped_nature}\n{incident_address}"},
+            tooltip={"text": "{date}\n{grouped_nature}\n{incident_address}"},
             map_style="light",
         )
     )
@@ -70,13 +82,13 @@ else:
     st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
 
 # ── Heatmap ────────────────────────────────────────────────────────────────────
-st.subheader("Incidents by Day of Week & Hour")
+st.subheader("Incidents by Weekday & Hour")
 heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
 fig_heat = px.density_heatmap(
     heat.sort_values("dow"),
-    x="dow",
-    y="hour",
+    x="hour",
+    y="dow",
     z="count",
     color_continuous_scale="Blues",
     labels={"hour": "Hour of Day", "dow": "", "count": "Incidents"},
@@ -105,3 +117,8 @@ else:
 
 fig.update_layout(height=350, margin=dict(t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
+
+# ── Table ────────────────────────────────────────────────────────────────
+st.subheader("Search Incidents")
+
+st.dataframe(fdf[['reported', 'grouped_nature', 'nature', 'nature_description', 'incident_address']].reset_index(drop = True), height = 600)
