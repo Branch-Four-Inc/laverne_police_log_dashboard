@@ -14,9 +14,11 @@ GROUPS = {
     "Robbery": ["211PC ROBBERY", "ROBBERY IP/JO"],
     "ADW": ["245PC ADW IP/JO", "245PC ADW RPT"],
     "Battery": ["BATTERY", "BATTERY IP/JO"],
-    "Suspicious Circumstances": ["SUSP CIRCS", "PDOBS"],
-    "Suspicious Subjects": ["SUSP SUBJ"],
-    "Suspicious Vehicle": ["SUSP VEHICLE"],
+    "Suspicious": ["SUSP CIRCS", "PDOBS", "SUSP SUBJ","SUSP VEHICLE"],
+    
+    # "Suspicious Circumstances": ["SUSP CIRCS", "PDOBS"],
+    # "Suspicious Subjects": ["SUSP SUBJ"],
+    # "Suspicious Vehicle": ["SUSP VEHICLE"],
     "Traffic Collision": ["TC NON INJURY", "TC HR NON INJ", "TC INJURY", "TC HIT RUN INJ", "TC VEH VS PED", "TC UNK"],
     "Petty Theft": ["PETTY THEFT", "PETTY THEFT RPT"],
     "Theft": ["THEFT MAIL", "IDENTITY THEFT"],
@@ -85,6 +87,9 @@ nature_to_group = {nature: group for group, natures in GROUPS.items() for nature
 df = pd.read_csv("daily_logs.csv")
 df["grouped_nature"] = df["nature"].map(nature_to_group).fillna(df["nature"])
 df.to_csv("daily_logs.csv", index=False)
+
+## FOR FUTURE: CLEAN UNMERGED NATURES TO THEIR CORRECT NATURE SPELLING
+
 
 print(df["grouped_nature"].value_counts().to_string())
 print(f"\nUnmapped natures: {df[~df['nature'].isin(nature_to_group)]['nature'].dropna().unique().tolist()}")

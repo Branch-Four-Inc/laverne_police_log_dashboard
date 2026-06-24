@@ -75,8 +75,8 @@ heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
 fig_heat = px.density_heatmap(
     heat.sort_values("dow"),
-    x="hour",
-    y="dow",
+    x="dow",
+    y="hour",
     z="count",
     color_continuous_scale="Blues",
     labels={"hour": "Hour of Day", "dow": "", "count": "Incidents"},
