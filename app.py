@@ -80,6 +80,9 @@ if "lat" in fdf.columns and fdf["lat"].notna().any():
     )
 else:
     st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
+    
+    
+st.text(f"Note: Only incidents with full addresses are mapped. {fdf[fdf['lat'].isna()].shape[0]} incidents are missing full addresses and are not mapped.")
 
 # ── Heatmap ────────────────────────────────────────────────────────────────────
 st.subheader("Incidents by Weekday & Hour")
@@ -121,4 +124,9 @@ st.plotly_chart(fig, use_container_width=True)
 # ── Table ────────────────────────────────────────────────────────────────
 st.subheader("Search Incidents")
 
-st.dataframe(fdf[['reported', 'grouped_nature', 'nature', 'nature_description', 'incident_address']].reset_index(drop = True), height = 600)
+fdf = fdf.rename({'reported': 'Report Date', 
+                  'grouped_nature': 'Category', 
+                  'nature_description': 'Description', 
+                  'incident_address': 'Address'}, axis = 1)
+
+st.dataframe(fdf[['Report Date', 'Category', 'Description', 'Address']].reset_index(drop = True), height = 600)
