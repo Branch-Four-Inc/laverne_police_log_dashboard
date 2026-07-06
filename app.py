@@ -51,7 +51,7 @@ if today.day >= 10:
 # prior 1 months logs
 else:
     filter_start = today.replace(day=1) - relativedelta(months=2)
-    filter_end = today.replace(day=1) - relativedelta(months=2) - relativedelta(days=1)
+    filter_end = today.replace(day=1) - relativedelta(months=1) - relativedelta(days=2)
 
 date_range = st.sidebar.date_input("Date range", (filter_start, filter_end), min_value=min_date, max_value=max_date)
 selected = st.sidebar.multiselect("Nature", natures, default=natures)
