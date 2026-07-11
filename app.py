@@ -43,15 +43,18 @@ st.sidebar.header("Filters")
 # set end date to last day of last month
 today = date.today()
 
+filter_start = pd.to_datetime('2026-05-01')
+filter_end = pd.to_datetime('2026-05-30')
+
 # give 10 days to refresh data for the next month 
 # prior 2 month's logs
-if today.day >= 10: 
-    filter_start = today.replace(day=1) - relativedelta(months=1)
-    filter_end = today.replace(day=1) - relativedelta(days=2)
-# prior 1 months logs
-else:
-    filter_start = today.replace(day=1) - relativedelta(months=2)
-    filter_end = today.replace(day=1) - relativedelta(months=1) - relativedelta(days=2)
+# if today.day >= 10: 
+#     filter_start = today.replace(day=1) - relativedelta(months=1)
+#     filter_end = today.replace(day=1) - relativedelta(days=2)
+# # prior 1 months logs
+# else:
+#     filter_start = today.replace(day=1) - relativedelta(months=2)
+#     filter_end = today.replace(day=1) - relativedelta(months=1) - relativedelta(days=2)
 
 date_range = st.sidebar.date_input("Date range", (filter_start, filter_end), min_value=min_date, max_value=max_date)
 selected = st.sidebar.multiselect("Nature", natures, default=natures)
