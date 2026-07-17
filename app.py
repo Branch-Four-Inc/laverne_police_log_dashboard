@@ -7,6 +7,8 @@ st.set_page_config(page_title="Police Incidents", layout="wide")
 
 DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 SAFE_COLORS = px.colors.qualitative.Safe
+# 12 AM, 1 AM, ... 11 PM — used to force chronological (not alphabetical) order on the heatmap x-axis
+HOUR_LABELS = [f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}" for h in range(24)]
 
 
 def _to_rgb(c):
@@ -38,9 +40,14 @@ min_date, max_date = df["log_date"].min().date(), df["log_date"].max().date()
 st.sidebar.header("Filters")
 date_range = st.sidebar.date_input("Date range", (min_date, max_date), min_value=min_date, max_value=max_date)
 selected = st.sidebar.multiselect("Nature", natures, default=natures)
+address_query = st.sidebar.text_input("Street address contains", placeholder="e.g. Foothill Blvd")
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 fdf = df[df["log_date"].dt.date.between(start, end) & df["grouped_nature"].isin(selected)]
+
+# Simple substring match so partial street names work (e.g. "foothill" matches "2269 FOOTHILL BLVD")
+if address_query:
+    fdf = fdf[fdf["incident_address"].str.contains(address_query, case=False, na=False)]
 
 st.title(f"La Verne Police Incidents — {len(fdf):,} records")
 
@@ -73,13 +80,18 @@ else:
 st.subheader("Incidents by Day of Week & Hour")
 heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
+
+# Raw hour is 0-23, which isn't intuitive to read — swap in "12 AM", "1 AM", etc.
+heat["hour_label"] = heat["hour"].map(lambda h: HOUR_LABELS[h])
+
 fig_heat = px.density_heatmap(
     heat.sort_values("dow"),
-    x="hour",
+    x="hour_label",
     y="dow",
     z="count",
     color_continuous_scale="Blues",
-    labels={"hour": "Hour of Day", "dow": "", "count": "Incidents"},
+    category_orders={"hour_label": HOUR_LABELS, "dow": DOW_ORDER},
+    labels={"hour_label": "Hour of Day", "dow": "", "count": "Incidents"},
 )
 fig_heat.update_layout(height=320, margin=dict(t=10, b=10))
 st.plotly_chart(fig_heat, use_container_width=True)
