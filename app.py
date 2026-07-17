@@ -10,6 +10,8 @@ st.set_page_config(page_title="Police Incidents", layout="wide")
 
 DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 SAFE_COLORS = px.colors.qualitative.Safe
+# 12 AM, 1 AM, ... 11 PM — used to force chronological (not alphabetical) order on the heatmap x-axis
+HOUR_LABELS = [f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}" for h in range(24)]
 
 
 def _to_rgb(c):
@@ -56,16 +58,24 @@ filter_end = pd.to_datetime('2026-05-30')
 #     filter_start = today.replace(day=1) - relativedelta(months=2)
 #     filter_end = today.replace(day=1) - relativedelta(months=1) - relativedelta(days=2)
 
-date_range = st.sidebar.date_input("Date range", (filter_start, filter_end), min_value=min_date, max_value=max_date)
+date_range = st.sidebar.date_input("Date Range", (filter_start, filter_end), min_value=min_date, max_value=max_date)
+address_query = st.sidebar.text_input("Street Address", placeholder="e.g. Foothill Blvd")
 selected = st.sidebar.multiselect("Nature", natures, default=natures)
 
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 fdf = df[df["log_date"].dt.date.between(start, end) & df["grouped_nature"].isin(selected)]
 
-st.title(f"La Verne Police Incidents")
+
+st.title("La Verne Police Incidents")
 st.subheader(f"{filter_start.strftime('%B %d')} to {filter_end.strftime('%B %d %Y')}: {len(fdf):,} reports")
 st.divider()
+
+# Simple substring match so partial street names work (e.g. "foothill" matches "2269 FOOTHILL BLVD")
+if address_query:
+    fdf = fdf[fdf["incident_address"].str.contains(address_query, case=False, na=False)]
+
+
 
 # ── Map ────────────────────────────────────────────────────────────────────────
 if "lat" in fdf.columns and fdf["lat"].notna().any():
@@ -99,13 +109,18 @@ st.text(f"Note: Only incidents with full addresses are mapped. {fdf[fdf['lat'].i
 st.subheader("Incidents by Weekday & Hour")
 heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
+
+# Raw hour is 0-23, which isn't intuitive to read — swap in "12 AM", "1 AM", etc.
+heat["hour_label"] = heat["hour"].map(lambda h: HOUR_LABELS[h])
+
 fig_heat = px.density_heatmap(
     heat.sort_values("dow"),
-    x="hour",
+    x="hour_label",
     y="dow",
     z="count",
     color_continuous_scale="Blues",
-    labels={"hour": "Hour of Day", "dow": "", "count": "Incidents"},
+    category_orders={"hour_label": HOUR_LABELS, "dow": DOW_ORDER},
+    labels={"hour_label": "Hour of Day", "dow": "", "count": "Incidents"},
 )
 fig_heat.update_layout(height=320, margin=dict(t=10, b=10))
 st.plotly_chart(fig_heat, use_container_width=True)
@@ -133,7 +148,7 @@ fig.update_layout(height=350, margin=dict(t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
 
 # ── Table ────────────────────────────────────────────────────────────────
-st.subheader("Search Incidents")
+st.subheader("Search All Incidents")
 
 fdf = fdf.rename({'reported': 'Report Date', 
                   'grouped_nature': 'Category', 
