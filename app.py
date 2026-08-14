@@ -49,7 +49,10 @@ fdf = df[df["log_date"].dt.date.between(start, end) & df["grouped_nature"].isin(
 if address_query:
     fdf = fdf[fdf["incident_address"].str.contains(address_query, case=False, na=False)]
 
-st.title(f"La Verne Police Incidents — {len(fdf):,} records")
+st.title("La Verne Police Incidents")
+count_col1, count_col2 = st.columns(2)
+count_col1.metric("Filtered Incidents", f"{len(fdf):,}")
+count_col2.metric("Total Incidents (all dates & natures)", f"{len(df):,}")
 
 # ── Map ────────────────────────────────────────────────────────────────────────
 if "lat" in fdf.columns and fdf["lat"].notna().any():
@@ -117,3 +120,26 @@ else:
 
 fig.update_layout(height=350, margin=dict(t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
+
+# ── Assist Agency table ───────────────────────────────────────────────────────
+# Pulled out separately since these get folded into "Welfare/Assist" above and are
+# easy to miss. Also a lot of these are calls where LVPD helped a *different* agency
+# at an address in another city (not La Verne) — worth reviewing on their own rather
+# than plotted on the map, since we can't assume they're actually here.
+st.subheader("Assist Agency Calls")
+st.caption(
+    "Raw \"ASSIST AGENCY\" incidents, shown separately from the Nature filter above. "
+    "Some of these are mutual-aid calls to other cities, not La Verne itself — addresses "
+    "without lat/lon below are excluded from the map and OpenAI backfill for that reason."
+)
+
+assist = df[df["log_date"].dt.date.between(start, end) & (df["nature"] == "ASSIST AGENCY")]
+if address_query:
+    assist = assist[assist["incident_address"].str.contains(address_query, case=False, na=False)]
+
+st.dataframe(
+    assist[["reported", "incident_address", "lat", "lon"]].sort_values("reported", ascending=False),
+    use_container_width=True,
+    hide_index=True,
+)
+st.caption(f"{len(assist):,} Assist Agency calls in the selected date range ({assist['lat'].notna().sum():,} geocoded)")
