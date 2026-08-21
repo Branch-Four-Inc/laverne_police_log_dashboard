@@ -7,8 +7,8 @@ st.set_page_config(page_title="Police Incidents", layout="wide")
 
 DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 SAFE_COLORS = px.colors.qualitative.Safe
-# 12 AM, 1 AM, ... 11 PM — used to force chronological (not alphabetical) order on the heatmap x-axis
-HOUR_LABELS = [f"{h % 12 or 12} {'AM' if h < 12 else 'PM'}" for h in range(24)]
+# 12 a.m., 1 a.m., ... 11 p.m. — used to force chronological (not alphabetical) order on the heatmap x-axis
+HOUR_LABELS = [f"{h % 12 or 12} {'a.m.' if h < 12 else 'p.m.'}" for h in range(24)]
 
 
 def _to_rgb(c):
@@ -39,7 +39,13 @@ min_date, max_date = df["log_date"].min().date(), df["log_date"].max().date()
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
 date_range = st.sidebar.date_input("Date range", (min_date, max_date), min_value=min_date, max_value=max_date)
-selected = st.sidebar.multiselect("Nature", natures, default=natures)
+
+# Multiselect has a built-in "clear all" (the x) but nothing to get back to everything
+# selected -- this button sets session_state before the widget below reads it.
+if st.sidebar.button("Select All"):
+    st.session_state["incident_type_filter"] = natures
+selected = st.sidebar.multiselect("Incident Type", natures, default=natures, key="incident_type_filter")
+
 address_query = st.sidebar.text_input("Street address contains", placeholder="e.g. Foothill Blvd")
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
@@ -80,7 +86,7 @@ else:
     st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
 
 # ── Heatmap ────────────────────────────────────────────────────────────────────
-st.subheader("Incidents by Day of Week & Hour")
+st.subheader("Total Incidents by Day of Week & Hour")
 heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
 
@@ -100,8 +106,8 @@ fig_heat.update_layout(height=320, margin=dict(t=10, b=10))
 st.plotly_chart(fig_heat, use_container_width=True)
 
 # ── Daily chart ────────────────────────────────────────────────────────────────
-st.subheader("Incidents per Day")
-if st.toggle("Nature breakdown"):
+st.subheader("Total Incidents by Day")
+if st.toggle("Incident Type breakdown"):
     daily = fdf.groupby(["log_date", "grouped_nature"]).size().reset_index(name="count")
     fig = px.bar(
         daily,
@@ -109,7 +115,7 @@ if st.toggle("Nature breakdown"):
         y="count",
         color="grouped_nature",
         color_discrete_sequence=SAFE_COLORS,
-        labels={"log_date": "Date", "count": "Incidents", "grouped_nature": "Nature"},
+        labels={"log_date": "Date", "count": "Incidents", "grouped_nature": "Incident Type"},
     )
 else:
     daily = fdf.groupby("log_date").size().reset_index(name="count")
@@ -119,6 +125,7 @@ else:
     fig.add_scatter(x=daily["log_date"], y=daily["rolling_7"], name="7-day avg", line=dict(color="#1a4a8a", width=2.5))
 
 fig.update_layout(height=350, margin=dict(t=10, b=10))
+fig.update_xaxes(tickformat="%B %Y")  # full month name (e.g. "April 2025") instead of the "Apr 2025" default
 st.plotly_chart(fig, use_container_width=True)
 
 # ── Assist Agency table ───────────────────────────────────────────────────────
@@ -128,7 +135,7 @@ st.plotly_chart(fig, use_container_width=True)
 # than plotted on the map, since we can't assume they're actually here.
 st.subheader("Assist Agency Calls")
 st.caption(
-    "Raw \"ASSIST AGENCY\" incidents, shown separately from the Nature filter above. "
+    "Raw \"ASSIST AGENCY\" incidents, shown separately from the Incident Type filter above. "
     "Some of these are mutual-aid calls to other cities, not La Verne itself — addresses "
     "without lat/lon below are excluded from the map and OpenAI backfill for that reason."
 )
