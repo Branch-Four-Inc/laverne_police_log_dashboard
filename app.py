@@ -182,7 +182,7 @@ st.markdown('''
 
 data_dict = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
 data_dict['Description'] = data_dict['Description'].fillna(data_dict['Incident Type'])
-data_dict = data_dict[['Incident Type', 'Code', 'Description']].sort_values("Incident Type", ascending = False)
+data_dict = data_dict[['Incident Type', 'Code', 'Description']].sort_values("Incident Type", ascending = True)
 
 
 with st.expander("View Data Dictionary"):
