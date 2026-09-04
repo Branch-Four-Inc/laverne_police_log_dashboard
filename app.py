@@ -180,11 +180,10 @@ st.markdown('''
             
 # --- DATA DICTIONARY DROPDOWN -----------------------------------------------------
 
-
 data_dict = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
 data_dict['Description'] = data_dict['Description'].fillna(data_dict['Incident Type'])
-data_dict = data_dict[['Incident Type', 'Code', 'Description']]
+data_dict = data_dict[['Incident Type', 'Code', 'Description']].sort_values("Incident Type", ascending = False)
 
 
-with st.expander("View Incident Type Descriptions"):
+with st.expander("View Data Dictionary"):
     st.dataframe(data_dict, hide_index=True, use_container_width=True)
