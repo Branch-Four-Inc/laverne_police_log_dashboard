@@ -56,9 +56,9 @@ start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 fdf = df[df["log_date"].dt.date.between(start, end) & df["grouped_nature"].isin(selected)]
 
 
-st.title("La Verne Police Incidents")
-st.subheader(f"{filter_start.strftime('%B %d')} to {filter_end.strftime('%B %d %Y')}: {len(fdf):,} reports")
-st.divider()
+# st.title("La Verne Police Incidents")
+# #st.subheader(f"{filter_start.strftime('%B %d')} to {filter_end.strftime('%B %d %Y')}: {len(fdf):,} reports")
+# st.divider()
 
 # Simple substring match so partial street names work (e.g. "foothill" matches "2269 FOOTHILL BLVD")
 if address_query:
@@ -76,7 +76,7 @@ if "lat" in fdf.columns and fdf["lat"].notna().any():
     map_df["color"] = map_df["grouped_nature"].map(color_map)
     
     st.subheader("Incident Map")
-    st.caption("The map shows where reported incidents occurred. Hover over an incident on the map to see more information.")
+    st.caption("The Incident Map shows where reported incidents occurred. Hover over an incident on the map to see more information.")
     st.pydeck_chart(
         pdk.Deck(
             initial_view_state=pdk.ViewState(latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=13),
@@ -98,7 +98,7 @@ else:
     st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
     
     
-st.text(f"Note: Only incidents with full addresses are mapped. {fdf[fdf['lat'].isna()].shape[0]} incidents are missing full addresses and are not mapped.")
+st.caption(f"Note: Only incidents with full addresses are mapped. {fdf[fdf['lat'].isna()].shape[0]} incidents are missing full addresses and are not mapped.")
 
 # ── Heatmap ────────────────────────────────────────────────────────────────────
 st.subheader("Total Incidents by Day of Week & Hour")
@@ -149,44 +149,75 @@ fig.update_xaxes(tickformat="%B %Y")  # full month name (e.g. "April 2025") inst
 st.plotly_chart(fig, use_container_width=True)
 
 # ── Table ────────────────────────────────────────────────────────────────
-st.subheader("Search All Incidents")
+st.subheader("All Incidents")
+st.caption("The table lists all reported incidents.")
 
 fdf = fdf.rename({'reported': 'Report Date', 
-                  'grouped_nature': 'Category', 
+                  'grouped_nature': 'Incident Type', 
                   'nature_description': 'Description', 
                   'incident_address': 'Address'}, axis = 1)
 
-st.dataframe(fdf[['Report Date', 'Category', 'Description', 'Address']].reset_index(drop = True), height = 600)
+# # Add a search bar
+# search_query = st.text_input("Search the dataframe:")
+
+# # Filter the dataframe based on the search query
+# if search_query:
+#     filtered_df = fdf[
+#         fdf['Incident Type'].str.contains(search_query, case=False, na=False) |
+#         fdf['Description'].str.contains(search_query, case=False, na=False) |
+#         fdf['Address'].str.contains(search_query, case=False, na=False)
+#     ]
+# else:
+#     filtered_df = fdf
+
+st.dataframe(fdf[['Report Date', 'Incident Type', 'Description', 'Address']].reset_index(drop = True), height = 600, use_container_width=True, hide_index=True)
 
 
-# ── Assist Agency table ───────────────────────────────────────────────────────
+# ── Assist Agency dropdown ───────────────────────────────────────────────────────
 # Pulled out separately since these get folded into "Welfare/Assist" above and are
 # easy to miss. Also a lot of these are calls where LVPD helped a *different* agency
 # at an address in another city (not La Verne) — worth reviewing on their own rather
 # than plotted on the map, since we can't assume they're actually here.
-st.subheader("Assist Agency Calls")
+#st.subheader("Assist Agency Calls")
 
-st.caption('''
-    The table lists all Assist Agency Calls. 'Assist Agency' are incidents where the La Verne police department 
-    assists a nearby police department with an incident, or a nearby police department assists La Verne PD with an incident.
-    Note: Raw \"ASSIST AGENCY\" incidents, are shown separately from the Incident Type filter.
-    Addresses without lat/lon below are excluded from the Incident Map.
-    '''
-)
 
 assist = df[df["log_date"].dt.date.between(start, end) & (df["nature"] == "ASSIST AGENCY")]
+
 if address_query:
     assist = assist[assist["incident_address"].str.contains(address_query, case=False, na=False)]
 
-st.dataframe(
-    assist[["reported", "incident_address", "lat", "lon"]].sort_values("reported", ascending=False),
-    use_container_width=True,
-    hide_index=True,
-)
-st.caption(f"{len(assist):,} Assist Agency calls in the selected date range ({assist['lat'].notna().sum():,} geocoded)")
+assist = assist.rename({'reported': 'Report Date', 
+                  'grouped_nature': 'Incident Type', 
+                  'nature_description': 'Description', 
+                  'incident_address': 'Address', 
+                  'lat': 'Latitude', 
+                  'lon': 'Longitude'}, axis = 1)
+
+with st.expander("View Assist Agency Calls"):
+    st.caption('''
+        The table lists all Assist Agency Calls. 'Assist Agency' are incidents where the La Verne police department 
+        assists a nearby police department with an incident, or a nearby police department assists La Verne PD with an incident.
+        Note: Raw \"ASSIST AGENCY\" incidents, are shown separately from the Incident Type filter.
+        Addresses without lat/lon below are excluded from the Incident Map.
+        '''
+    )
+    st.dataframe(
+        assist[["Report Date", "Address", "Latitude", "Longitude"]].sort_values("Report Date", ascending=False),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(f"{len(assist):,} Assist Agency calls in the selected date range ({assist['Latitude'].notna().sum():,} geocoded)")
 
 
+# --- DATA DICTIONARY DROPDOWN -----------------------------------------------------
 
+data_dict = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
+data_dict['Description'] = data_dict['Description'].fillna(data_dict['Incident Type'])
+data_dict = data_dict[['Incident Type', 'Code', 'Description']].sort_values("Incident Type", ascending = True)
+
+
+with st.expander("View Data Dictionary"):
+    st.dataframe(data_dict, hide_index=True, use_container_width=True)
 
 # --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
 st.subheader("Important")
@@ -200,12 +231,3 @@ st.markdown('''
             
             ''')
             
-# --- DATA DICTIONARY DROPDOWN -----------------------------------------------------
-
-data_dict = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
-data_dict['Description'] = data_dict['Description'].fillna(data_dict['Incident Type'])
-data_dict = data_dict[['Incident Type', 'Code', 'Description']].sort_values("Incident Type", ascending = True)
-
-
-with st.expander("View Data Dictionary"):
-    st.dataframe(data_dict, hide_index=True, use_container_width=True)
