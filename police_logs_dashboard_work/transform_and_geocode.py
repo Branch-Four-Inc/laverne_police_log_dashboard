@@ -130,7 +130,7 @@ GROUPS = {
     "Vandalism": ["594 PC GRAFFITI", "594PC VANDALISM", "VANDALISM IP/JO"],
     "Burglary": ["459PC BURGLARY", "BURGLARY IP/JO", "459PC VEH/BURG"],
     "Robbery": ["211PC ROBBERY", "ROBBERY IP/JO"],
-    "ADW": ["245PC ADW IP/JO", "245PC ADW RPT"],
+    "Assault w/Deadly Weapon": ["245PC ADW IP/JO", "245PC ADW RPT"],
     "Battery": ["BATTERY", "BATTERY IP/JO"],
     "Suspicious Circumstances": ["SUSP CIRCS", "PDOBS"],
     "Suspicious Subjects": ["SUSP SUBJ"],
@@ -188,6 +188,15 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=["reported"]).copy()
 
     df = df[df["reported"] <= CUTOFF_DATE].copy()
+
+    # LVPD's daily PDFs sometimes carry the tail end of one day over into the next day's
+    # post, so the scraper picks up the same incident twice under two different log_dates.
+    # The incident ID is the real unique key -- keep the first sighting, drop the repeat.
+    before = len(df)
+    df = df.drop_duplicates(subset=["incident"], keep="first")
+    dropped = before - len(df)
+    if dropped:
+        print(f"[info] Dropped {dropped} duplicate rows (same incident ID logged twice).")
 
     # App expects "YYYY-MM-DD" for the date column and "YYYY-MM-DD HH:MM:SS" for reported
     df["date"] = df["reported"].dt.date.astype(str)

@@ -4,92 +4,80 @@
 # dependencies = ["pandas"]
 # ///
 import pandas as pd
+try:
+    from rapidfuzz import process, fuzz
+    USE_RAPIDFUZZ = True
+except ImportError:
+    import difflib
+    USE_RAPIDFUZZ = False
 
-GROUPS = {
-    "Fraud": ["470 PC FRAUD", "537E PC DEFRAUD"],
-    "Grand Theft": ["487 PC", "GTARPT", "GRAND THEFT VEH", "GTA IP/JO", "GTA LOCATED"],
-    "Vehicle Theft": ["THEFT VEHICLE"],
-    "Vandalism": ["594 PC GRAFFITI", "594PC VANDALISM", "VANDALISM IP/JO"],
-    "Burglary": ["459PC BURGLARY", "BURGLARY IP/JO", "459PC VEH/BURG"],
-    "Robbery": ["211PC ROBBERY", "ROBBERY IP/JO"],
-    "ADW": ["245PC ADW IP/JO", "245PC ADW RPT"],
-    "Battery": ["BATTERY", "BATTERY IP/JO"],
-    "Suspicious": ["SUSP CIRCS", "PDOBS", "SUSP SUBJ","SUSP VEHICLE"],
-    
-    # "Suspicious Circumstances": ["SUSP CIRCS", "PDOBS"],
-    # "Suspicious Subjects": ["SUSP SUBJ"],
-    # "Suspicious Vehicle": ["SUSP VEHICLE"],
-    "Traffic Collision": ["TC NON INJURY", "TC HR NON INJ", "TC INJURY", "TC HIT RUN INJ", "TC VEH VS PED", "TC UNK"],
-    "Petty Theft": ["PETTY THEFT", "PETTY THEFT RPT"],
-    "Theft": ["THEFT MAIL", "IDENTITY THEFT"],
-    "Disturbance": [
-        "DISTURB PERSON",
-        "DISTURB SUBJS",
-        "DISTURB NOISE",
-        "DISTURB MUSIC",
-        "DISTURB PARTY",
-        "DISTURB ROAD",
-        "DISTURB UNK",
-        "DISTURB SHOTS",
-        "DISTURB FIREWKS",
-    ],
-    "Threatening Calls": ["653M PC"],
-    "Fight": ["FIGHT IP/JO"],
-    "Impound": ["PPI"],
-    "Traffic Stop": ["TRAFFIC STOP"],
-    "Traffic Enforcement": ["TRAFFIC ENFORCE", "TRAFFIC HAZARD", "BIKE TRAFFIC", "SPEEDING VEH", "PEDESTRIAN TRAF"],
-    "Parking": ["ILLEGAL PARKER", "ABAND VEH"],
-    "Suspicious Activity": ["SUSP TRANS", "SUSP NOISE"],
-    "Drug/Alcohol": ["DRUG ACTIVITY", "DUI", "PUBLIC INTOX"],
-    "Animal": [
-        "ANIMAL BITE RPT",
-        "ANIMAL CRUELTY",
-        "ANIMAL INJURED",
-        "ANIMAL VICIOUS",
-        "BARKING DOG",
-        "HUMANE PROBLEM",
-        "BEAR PROB",
-    ],
-    "Property": ["FOUND PROP", "LOST PROPERTY", "PROP FOR DESTR", "VEH TAMPERING"],
-    "Welfare/Assist": [
-        "WELFARE CHECK",
-        "CITIZEN ASST",
-        "CODE H SUBJ",
-        "ASSIST AGENCY",
-        "APS REF",
-        "KEEP THE PEACE",
-        "HAIL BY CITIZEN",
-    ],
-    "Trespass/Solicitor": ["TRESPASS", "SOLICITOR"],
-    "Shoplifting": ["SHOPLIFTER IC"],
-    "Other": [
-        "911 INVEST",
-        "AREA CHECK",
-        "FOOT PATROL",
-        "CITE SIGN OFF",
-        "LA VERNE MUNI",
-        "COMM BUILD CHK",
-        "MISSING ADULT",
-        "MISSING FOUND",
-        "INDECENT EXPOS",
-        "BRANDISH WEAPON",
-        "BOMB THREAT",
-        "PROWLER",
-        "CRIM THRT RPT",
-        "ILLEGAL BURN",
-        "SUSP CIRCS",
-        "TRAFFIC STOP",
-    ],
-}
+def fuzzy_match(nature, choices, threshold=85):
+    if pd.isna(nature):
+        return None
+    if USE_RAPIDFUZZ:
+        match = process.extractOne(nature, choices, scorer=fuzz.WRatio)
+        if match and match[1] >= threshold:
+            return match[0]  # matched known nature string
+        return None
+    else:
+        matches = difflib.get_close_matches(nature, choices, n=1, cutoff=threshold/100)
+        return matches[0] if matches else None
 
-nature_to_group = {nature: group for group, natures in GROUPS.items() for nature in natures}
+# --------------------------------------------------------------------------------
+# MATCH NATURE TO DEFINED GROUPED NATURE
+# --------------------------------------------------------------------------------
+
+desc = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
+desc = desc.rename(columns = {"Code": "nature", 
+                       "Incident Type": "grouped_nature"})
+
+# Build a dict mapping nature -> grouped_nature
+desc_map = dict(zip(desc["nature"], desc["grouped_nature"]))
+
 
 df = pd.read_csv("daily_logs.csv")
-df["grouped_nature"] = df["nature"].map(nature_to_group).fillna(df["nature"])
+#df["grouped_nature"] = df["nature"].map(nature_to_group).fillna(df["nature"])
+#df["grouped_nature"] = df["nature"].map(desc_map).fillna(df["nature"])
+df["grouped_nature"] = df["nature"].map(desc_map)
+
+df[~df['nature'].isin(desc_map)]
+
+
+# --- Fuzzy matching for natures missing in legend fil/grouped nature 
+
+known_natures = list(desc_map.keys())
+
+
+# Identify rows where grouped_nature is still missing (no exact match)
+unmatched_mask = df["grouped_nature"].isna()
+
+# Build a cache so we don't re-run fuzzy matching on the same unmatched string repeatedly
+unique_unmatched = df.loc[unmatched_mask, "nature"].unique()
+fuzzy_cache = {}
+
+for val in unique_unmatched:
+    best_match = fuzzy_match(val, known_natures, threshold=85)
+    fuzzy_cache[val] = desc_map[best_match] if best_match else None
+
+# Apply the fuzzy-matched groupings
+df.loc[unmatched_mask, "grouped_nature"] = df.loc[unmatched_mask, "nature"].map(fuzzy_cache)
+
+# Anything still unmatched: put as "Other"
+df["grouped_nature"] = df["grouped_nature"].fillna("Other")
+
+# Inspect what remains unresolved by fuzzy matching (optional sanity check)
+still_unmatched = df[df["grouped_nature"] == df["nature"]]
+print(still_unmatched["nature"].unique())
+
+
+
+
+#df2 = df.merge(desc[["nature", "grouped_nature"]], on ="nature", how = "left")
+#df2['grouped_nature'] = df2['grouped_nature'].fillna(df2['nature'])
 df.to_csv("daily_logs.csv", index=False)
 
 ## FOR FUTURE: CLEAN UNMERGED NATURES TO THEIR CORRECT NATURE SPELLING
 
 
 print(df["grouped_nature"].value_counts().to_string())
-print(f"\nUnmapped natures: {df[~df['nature'].isin(nature_to_group)]['nature'].dropna().unique().tolist()}")
+print(f"\nUnmapped natures: {df[~df['nature'].isin(desc_map)]['nature'].dropna().unique().tolist()}")
