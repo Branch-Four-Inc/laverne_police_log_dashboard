@@ -38,11 +38,12 @@ min_date, max_date = df["log_date"].min().date(), df["log_date"].max().date()
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
+st.sidebar.caption("Use the filters below to narrow the incidents you want to see. You can filter by Date, Incident Type, or Street Address.")
 date_range = st.sidebar.date_input("Date range", (min_date, max_date), min_value=min_date, max_value=max_date)
 
 # Multiselect has a built-in "clear all" (the x) but nothing to get back to everything
 # selected -- this button sets session_state before the widget below reads it.
-if st.sidebar.button("Select All"):
+if st.sidebar.button("Select All Incidents"):
     st.session_state["incident_type_filter"] = natures
 selected = st.sidebar.multiselect("Incident Type", natures, default=natures, key="incident_type_filter")
 
@@ -59,12 +60,15 @@ st.title("La Verne Police Incidents")
 count_col1, count_col2 = st.columns(2)
 count_col1.metric("Filtered Incidents", f"{len(fdf):,}")
 count_col2.metric("Total Incidents (all dates & natures)", f"{len(df):,}")
+#st.caption("This dashboard shows all incidents reported to the La Verne Police Department in the selected filters. Data are sourced from the La Verne Police Department.")
 
 # ── Map ────────────────────────────────────────────────────────────────────────
 if "lat" in fdf.columns and fdf["lat"].notna().any():
     map_df = fdf.dropna(subset=["lat", "lon"]).copy()
     map_df["color"] = map_df["grouped_nature"].map(color_map)
+    
     st.subheader("Incident Map")
+    st.caption("The map shows where reported incidents occurred. Hover over an incident on the map to see more information.")
     st.pydeck_chart(
         pdk.Deck(
             initial_view_state=pdk.ViewState(latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=13),
@@ -87,6 +91,7 @@ else:
 
 # ── Heatmap ────────────────────────────────────────────────────────────────────
 st.subheader("Total Incidents by Day of Week & Hour")
+st.caption("The heatmap shows the total number of incidents by day of the week and time. This illustrates when incidents most often occur.")
 heat = fdf.groupby(["dow", "hour"]).size().reset_index(name="count")
 heat["dow"] = pd.Categorical(heat["dow"], categories=DOW_ORDER, ordered=True)
 
@@ -107,6 +112,10 @@ st.plotly_chart(fig_heat, use_container_width=True)
 
 # ── Daily chart ────────────────────────────────────────────────────────────────
 st.subheader("Total Incidents by Day")
+st.caption('''The light grey line shows the total number of reported incidents by date. 
+           The dark blue line shows the 7-day average of the number of incidents. Click the 
+           'Incident Type Breakdown' to view the incident types by date.
+           ''')
 if st.toggle("Incident Type breakdown"):
     daily = fdf.groupby(["log_date", "grouped_nature"]).size().reset_index(name="count")
     fig = px.bar(
@@ -134,10 +143,13 @@ st.plotly_chart(fig, use_container_width=True)
 # at an address in another city (not La Verne) — worth reviewing on their own rather
 # than plotted on the map, since we can't assume they're actually here.
 st.subheader("Assist Agency Calls")
-st.caption(
-    "Raw \"ASSIST AGENCY\" incidents, shown separately from the Incident Type filter above. "
-    "Some of these are mutual-aid calls to other cities, not La Verne itself — addresses "
-    "without lat/lon below are excluded from the map and OpenAI backfill for that reason."
+
+st.caption('''
+    The table lists all Assist Agency Calls. 'Assist Agency' are incidents where the La Verne police department 
+    assists a nearby police department with an incident, or a nearby police department assists La Verne PD with an incident.
+    Note: Raw \"ASSIST AGENCY\" incidents, are shown separately from the Incident Type filter.
+    Addresses without lat/lon below are excluded from the Incident Map.
+    '''
 )
 
 assist = df[df["log_date"].dt.date.between(start, end) & (df["nature"] == "ASSIST AGENCY")]
@@ -150,3 +162,29 @@ st.dataframe(
     hide_index=True,
 )
 st.caption(f"{len(assist):,} Assist Agency calls in the selected date range ({assist['lat'].notna().sum():,} geocoded)")
+
+
+
+
+# --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
+st.subheader("Important")
+st.markdown('''
+            * Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
+            * This dashboard shows reported incidents and is intended for informational purposes only.
+            * This dashboard may make mistakes. 
+            * Reported incidents do not necessarily mean that a crime occurred or that anyone was arrested or found responsible.
+            * Incident information may be updated or corrected over time.
+            * This dashboard is not for reporting emergencies or crimes. For an emergency, call 911.
+            
+            ''')
+            
+# --- DATA DICTIONARY DROPDOWN -----------------------------------------------------
+
+
+data_dict = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
+data_dict['Description'] = data_dict['Description'].fillna(data_dict['Incident Type'])
+data_dict = data_dict[['Incident Type', 'Code', 'Description']]
+
+
+with st.expander("View Incident Type Descriptions"):
+    st.dataframe(data_dict, hide_index=True, use_container_width=True)

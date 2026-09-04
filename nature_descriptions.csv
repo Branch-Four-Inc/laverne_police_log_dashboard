@@ -1,0 +1,106 @@
+,Code,Incident Type,Description
+0,470 PC FRAUD,Fraud,Fraud Report
+1,537E PC DEFRAUD,Fraud,
+2,487 PC,Grand Theft,Grand Theft Report
+3,GTARPT,Grand Theft,
+4,GRAND THEFT VEH,Grand Theft,
+5,GTA IP/JO,Grand Theft,
+6,GTA LOCATED,Grand Theft,
+7,THEFT VEHICLE,Vehicle Theft,
+8,10851 VC,Vehicle Theft,Stolen Vehicle Report
+9,459PC,Vehicle Theft,VEH/BURG Burlary Vehicle Report
+10,594 PC GRAFFITI,Vandalism,
+11,594PC VANDALISM,Vandalism,Vandalism Report
+12,VANDALISM IP/JO,Vandalism,
+13,459PC BURGLARY,Burglary,
+14,BURGLARY IP/JO,Burglary,
+15,459PC VEH/BURG,Burglary,
+16,211PC ROBBERY,Robbery,
+17,ROBBERY IP/JO,Robbery,
+18,245PC ADW IP/JO,ADW,
+19,245PC ADW RPT,ADW,
+20,245PC,ADW,ADW Assault w/ Deadly Weapon
+21,BATTERY,Battery,
+22,BATTERY IP/JO,Battery,
+23,BATTERY IP,Battery,Battery In Progress
+24,SUSP CIRCS,Suspicious Circumstances,Suspicious Circumstances
+25,PDOBS,Suspicious Circumstances,Police Department Observed Suspicious Circumstances
+26,SUSP SUBJ,Suspicious Subjects,Suspicious Subjects
+27,PROWLER,Suspicious Subjects,
+28,SUSP VEHICLE,Suspicious Vehicle,
+29,SUSP VEH,Suspicious Vehicle,Suspicious Vehicle
+30,TC NON INJURY,Traffic Collision,Traffic Collision - Non Injury
+31,TC HR NON INJ,Traffic Collision,"Traffic Collision Accident, Hit and Run - Non Injuries"
+32,TC INJURY,Traffic Collision,Traffic Collision - Injury
+33,TC HIT RUN INJ,Traffic Collision,"Traffic Collision Accident, Hit and Run - Injuries"
+34,TC VEH VS PED,Traffic Collision,
+35,TC UNK,Traffic Collision,
+36,PETTY THEFT,Petty Theft,
+37,PETTY THEFT RPT,Petty Theft,
+38,PETTYTHEFTIP,Petty Theft,Petty Theft In Progress
+39,THEFT MAIL,Theft,
+40,IDENTITY THEFT,Theft,
+41,DISTURB PERSON,Disturbance,
+42,DISTURB SUBJS,Disturbance,
+43,DISTURB NOISE,Disturbance,
+44,DISTURB MUSIC,Disturbance,
+45,DISTURB PARTY,Disturbance,
+46,DISTURB ROAD,Disturbance,
+47,DISTURB UNK,Disturbance,Unknown Disturbance
+48,DISTURB SHOTS,Disturbance,
+49,DISTURB FIREWKS,Disturbance,
+50,653M PC,Threatening Calls,Annoying / Threatening Telephone Calls
+51,FIGHT IP/JO,Fight,
+52,FIGHT IP,Fight,Fight In Progress
+53,PPI,Impound,Impounded Vehicle Private Party
+54,TRAFFIC STOP,Traffic Stop,
+55,TRAFFIC ENFORCE,Traffic Enforcement,
+56,TRAFFIC HAZARD,Traffic Enforcement,
+57,BIKE TRAFFIC,Traffic Enforcement,
+58,SPEEDING VEH,Traffic Enforcement,
+59,PEDESTRIAN TRAF,Traffic Enforcement,
+60,ILLEGAL PARKER,Parking,
+61,ABAND VEH,Parking,
+62,SUSP TRANS,Suspicious Activity,
+63,SUSP NOISE,Suspicious Activity,
+64,DRUG ACTIVITY,Drug/Alcohol,
+65,DUI,Drug/Alcohol,
+66,PUBLIC INTOX,Drug/Alcohol,
+67,ANIMAL BITE RPT,Animal,
+68,ANIMAL CRUELTY,Animal,
+69,ANIMAL INJURED,Animal,
+70,ANIMAL VICIOUS,Animal,
+71,BARKING DOG,Animal,
+72,HUMANE PROBLEM,Animal,
+73,BEAR PROB,Animal,
+74,FOUND PROP,Property,
+75,LOST PROPERTY,Property,
+76,PROP FOR DESTR,Property,
+77,VEH TAMPERING,Property,
+78,WELFARE CHECK,Welfare/Assist,
+79,CITIZEN ASST,Welfare/Assist,
+80,CODE H SUBJ,Welfare/Assist,
+81,ASSIST AGENCY,Welfare/Assist,
+82,APS REF,Welfare/Assist,
+83,KEEP THE PEACE,Welfare/Assist,
+84,HAIL BY CITIZEN,Welfare/Assist,
+85,TRESPASS,Trespass/Solicitor,
+86,SOLICITOR,Trespass/Solicitor,
+87,602PC,Trespass/Solicitor,Trespassing Report
+88,SHOPLIFTER IC,Shoplifting,
+89,911 INVEST,Other,911 Investigation
+90,AREA CHECK,Other,
+91,FOOT PATROL,Other,
+92,CITE SIGN OFF,Other,
+93,LA VERNE MUNI,Other,
+94,COMM BUILD CHK,Other,
+95,MISSING ADULT,Other,
+96,MISSING FOUND,Other,
+97,INDECENT EXPOS,Other,
+98,BRANDISH WEAPON,Other,
+99,BOMB THREAT,Other,
+100,CRIM THRT RPT,Other,
+101,ILLEGAL BURN,Other,
+102,166.4PC COURT,Other,Court Order Violaton Report
+103,REPO,Other,Vehicle Repossession
+104,WARRANT,Other,SRV Warrant Service / Attempt
