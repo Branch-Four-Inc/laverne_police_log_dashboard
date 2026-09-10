@@ -39,6 +39,12 @@ MONTH_NAMES = {
 }
 
 
+def structural_error(message: str) -> None:
+    """Log a source-format change before stopping the affected scrape step."""
+    LOGGER.error("Structural validation failed: %s", message)
+    raise RuntimeError(f"Structural validation failed: {message}")
+
+
 def make_session() -> requests.Session:
     session = requests.Session()
     session.headers.update({
@@ -138,6 +144,11 @@ def fetch_news_page_context(session: requests.Session) -> dict:
         if any(month in label_text for month in MONTH_NAMES):
             context["month_folders"][label_text] = category_id
 
+    if not context["month_folders"]:
+        structural_error(
+            "expected one or more 'li.dlp-folder > span.dlp-folder-label' month folders on the news page"
+        )
+
     return context
 
 
@@ -163,9 +174,25 @@ def fetch_daily_log_pdf_index(
             timeout=30,
         )
 
-        docs = response.json()
+        try:
+            docs = response.json()
+        except ValueError as exc:
+            structural_error(f"PDF index page {page} was not valid JSON: {exc}")
+        if not isinstance(docs, list):
+            structural_error(f"PDF index page {page} returned {type(docs).__name__}, not a document list")
         if not docs:
+            if page == 1:
+                structural_error("PDF index returned zero documents on its first page")
             break
+
+        required_fields = {"title", "download_url"}
+        for index, doc in enumerate(docs, start=1):
+            missing_fields = required_fields - set(doc)
+            title = doc.get("title")
+            if missing_fields or not isinstance(title, dict) or not title.get("rendered") or not doc.get("download_url"):
+                structural_error(
+                    f"PDF index page {page}, document {index} is missing expected title.rendered or download_url fields"
+                )
 
         all_docs.extend(docs)
         total_pages = int(response.headers.get("X-WP-TotalPages", 1))
@@ -201,6 +228,7 @@ def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
     col_names = ["incident", "reported", "nature", "incident_address"]
 
     rows = []
+    table_header_found = False
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
             chars = page.chars
@@ -225,10 +253,21 @@ def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
 
                 col_texts = {key: value.strip() for key, value in col_texts.items()}
 
-                if col_texts["incident"] == "INCIDENT" or not col_texts["incident"]:
+                if col_texts["incident"] == "INCIDENT":
+                    populated_columns = sum(bool(value) for value in col_texts.values())
+                    if populated_columns < len(col_names):
+                        structural_error(
+                            f"daily-log table header had {populated_columns}/{len(col_names)} expected columns"
+                        )
+                    table_header_found = True
+                    continue
+                if not col_texts["incident"]:
                     continue
                 if col_texts["incident"].isdigit():
                     rows.append(col_texts)
+
+    if not table_header_found:
+        structural_error("daily-log PDF did not contain the expected four-column table header")
 
     return rows
 
