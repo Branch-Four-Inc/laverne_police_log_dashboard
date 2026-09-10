@@ -26,6 +26,9 @@ from pipeline_logging import get_logger, install_exception_logger
 NEWS_URL = "https://lvpd.org/news-statistics"
 BASE_API = "https://lvpd.org/wp-json/wp/v2"
 DEFAULT_DAILY_LOG_CATEGORY_ID = 39
+MAX_HTTP_ATTEMPTS = 4
+RETRY_BACKOFF_SECONDS = 1
+MIN_PDF_BYTES = 5 * 1024
 LOGGER = get_logger()
 install_exception_logger(LOGGER)
 
@@ -48,10 +51,54 @@ def make_session() -> requests.Session:
     return session
 
 
+def get_with_retries(
+    session: requests.Session,
+    url: str,
+    *,
+    min_bytes: int | None = None,
+    **kwargs,
+) -> requests.Response:
+    """Require HTTP 200 and retry temporary or suspicious responses.
+
+    The minimum-size check is used for daily-log PDFs, where a tiny response
+    commonly means an error or block page was returned instead of a real PDF.
+    """
+    last_error: Exception | None = None
+
+    for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
+        try:
+            response = session.get(url, **kwargs)
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            if min_bytes is not None and len(response.content) < min_bytes:
+                raise RuntimeError(
+                    f"suspiciously small response: {len(response.content):,} bytes (minimum {min_bytes:,})"
+                )
+            return response
+        except (requests.RequestException, RuntimeError) as exc:
+            last_error = exc
+            if attempt == MAX_HTTP_ATTEMPTS:
+                break
+            delay = RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
+            print(f"[warn] Request failed ({exc}); retrying in {delay}s ({attempt}/{MAX_HTTP_ATTEMPTS})")
+            LOGGER.warning(
+                "Request to %s failed on attempt %s/%s: %s; retrying in %ss",
+                url,
+                attempt,
+                MAX_HTTP_ATTEMPTS,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+
+    print(f"[error] Could not access {url} after {MAX_HTTP_ATTEMPTS} attempts: {last_error}")
+    LOGGER.error("Could not access %s after %s attempts: %s", url, MAX_HTTP_ATTEMPTS, last_error)
+    raise RuntimeError(f"Could not access {url}") from last_error
+
+
 def fetch_news_page_context(session: requests.Session) -> dict:
     """Fetch the LVPD news/statistics page and extract helpful context from embedded scripts/HTML."""
-    response = session.get(NEWS_URL, timeout=30)
-    response.raise_for_status()
+    response = get_with_retries(session, NEWS_URL, timeout=30)
     soup = BeautifulSoup(response.content, "lxml")
 
     context = {
@@ -104,7 +151,8 @@ def fetch_daily_log_pdf_index(
     page = 1
 
     while True:
-        response = session.get(
+        response = get_with_retries(
+            session,
             f"{BASE_API}/dlp_document",
             params={
                 "doc_categories": category_id,
@@ -114,9 +162,6 @@ def fetch_daily_log_pdf_index(
             },
             timeout=30,
         )
-
-        if response.status_code != 200:
-            break
 
         docs = response.json()
         if not docs:
@@ -209,8 +254,7 @@ def download_and_parse_daily_logs(
             pdf_url = row["pdf_url"]
 
             try:
-                response = session.get(pdf_url, timeout=30)
-                response.raise_for_status()
+                response = get_with_retries(session, pdf_url, timeout=30, min_bytes=MIN_PDF_BYTES)
                 pdf_bytes = response.content
 
                 if zip_handle is not None:
