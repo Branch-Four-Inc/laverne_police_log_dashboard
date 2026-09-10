@@ -19,3 +19,6 @@ wheels/
 .env
 secrets.toml
 .streamlit/secrets.toml
+
+# Pipeline runtime log
+police_logs_dashboard_work/output/scraper.log
