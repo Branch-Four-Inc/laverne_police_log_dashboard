@@ -29,6 +29,7 @@ DEFAULT_DAILY_LOG_CATEGORY_ID = 39
 MAX_HTTP_ATTEMPTS = 4
 RETRY_BACKOFF_SECONDS = 1
 MIN_PDF_BYTES = 5 * 1024
+DEFAULT_REQUEST_DELAY_SECONDS = 0.5
 LOGGER = get_logger()
 install_exception_logger(LOGGER)
 
@@ -45,7 +46,10 @@ def structural_error(message: str) -> None:
     raise RuntimeError(f"Structural validation failed: {message}")
 
 
-def make_session() -> requests.Session:
+def make_session(request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS) -> requests.Session:
+    if request_delay_seconds < 0:
+        raise ValueError("request_delay_seconds cannot be negative")
+
     session = requests.Session()
     session.headers.update({
         "User-Agent": (
@@ -54,7 +58,27 @@ def make_session() -> requests.Session:
             "Chrome/125.0 Safari/537.36"
         )
     })
+    session.lvpd_request_delay_seconds = request_delay_seconds
+    session.lvpd_last_request_at = None
     return session
+
+
+def set_request_delay(session: requests.Session, request_delay_seconds: float) -> None:
+    """Configure the minimum spacing between all requests made by this session."""
+    if request_delay_seconds < 0:
+        raise ValueError("request_delay_seconds cannot be negative")
+    session.lvpd_request_delay_seconds = request_delay_seconds
+
+
+def wait_for_request_slot(session: requests.Session) -> None:
+    """Wait until this session has respected its minimum request interval."""
+    delay = getattr(session, "lvpd_request_delay_seconds", DEFAULT_REQUEST_DELAY_SECONDS)
+    last_request_at = getattr(session, "lvpd_last_request_at", None)
+    if last_request_at is not None:
+        remaining = delay - (time.monotonic() - last_request_at)
+        if remaining > 0:
+            time.sleep(remaining)
+    session.lvpd_last_request_at = time.monotonic()
 
 
 def get_with_retries(
@@ -73,6 +97,7 @@ def get_with_retries(
 
     for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
         try:
+            wait_for_request_slot(session)
             response = session.get(url, **kwargs)
             if response.status_code != 200:
                 raise RuntimeError(f"HTTP {response.status_code}")
@@ -158,6 +183,7 @@ def fetch_daily_log_pdf_index(
     sleep_seconds: float = 0.2,
 ) -> pd.DataFrame:
     """Fetch all Document Library Pro PDF records from the LVPD daily-logs category."""
+    set_request_delay(session, sleep_seconds)
     all_docs = []
     page = 1
 
@@ -202,7 +228,6 @@ def fetch_daily_log_pdf_index(
             break
 
         page += 1
-        time.sleep(sleep_seconds)
 
     pdf_df = pd.DataFrame([
         {
@@ -279,6 +304,7 @@ def download_and_parse_daily_logs(
     sleep_seconds: float = 0.15,
 ) -> tuple[pd.DataFrame, list[dict]]:
     """Download all daily log PDFs, optionally zip them, and parse incident rows."""
+    set_request_delay(session, sleep_seconds)
     log_pdfs = pdf_df[pdf_df["title"] != "Crime Reports Legend"].copy()
     print(f"Daily log PDFs to process: {len(log_pdfs)}")
 
@@ -311,8 +337,6 @@ def download_and_parse_daily_logs(
                 failed.append({"title": title, "url": pdf_url, "error": str(exc)})
                 LOGGER.error("Could not download or parse %s (%s): %s", title, pdf_url, exc)
 
-            time.sleep(sleep_seconds)
-
     finally:
         if zip_handle is not None:
             zip_handle.close()
@@ -337,11 +361,21 @@ def main() -> None:
     parser.add_argument("--output-csv", default="daily_logs.csv", help="Path for parsed incident CSV output.")
     parser.add_argument("--output-zip", default="lvpd_daily_logs.zip", help="Path for downloaded PDF ZIP output. Use empty string to skip.")
     parser.add_argument("--category-id", type=int, default=DEFAULT_DAILY_LOG_CATEGORY_ID, help="LVPD daily-log document category ID.")
-    parser.add_argument("--sleep", type=float, default=0.15, help="Delay between HTTP requests in seconds.")
+    parser.add_argument(
+        "--sleep",
+        type=float,
+        default=DEFAULT_REQUEST_DELAY_SECONDS,
+        help="Minimum delay between every HTTP request in seconds (default: 0.5).",
+    )
     args = parser.parse_args()
-    LOGGER.info("Scraper started: output_csv=%s, output_zip=%s", args.output_csv, args.output_zip or "disabled")
+    LOGGER.info(
+        "Scraper started: output_csv=%s, output_zip=%s, request_delay=%ss",
+        args.output_csv,
+        args.output_zip or "disabled",
+        args.sleep,
+    )
 
-    session = make_session()
+    session = make_session(args.sleep)
     context = fetch_news_page_context(session)
     print(f"Fresh nonce found: {context['ajax_nonce']}")
     print(f"Month folders found: {len(context['month_folders'])}")
