@@ -20,11 +20,14 @@ import pandas as pd
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
+from pipeline_logging import get_logger, install_exception_logger
 
 
 NEWS_URL = "https://lvpd.org/news-statistics"
 BASE_API = "https://lvpd.org/wp-json/wp/v2"
 DEFAULT_DAILY_LOG_CATEGORY_ID = 39
+LOGGER = get_logger()
+install_exception_logger(LOGGER)
 
 
 MONTH_NAMES = {
@@ -223,6 +226,7 @@ def download_and_parse_daily_logs(
 
             except Exception as exc:
                 failed.append({"title": title, "url": pdf_url, "error": str(exc)})
+                LOGGER.error("Could not download or parse %s (%s): %s", title, pdf_url, exc)
 
             time.sleep(sleep_seconds)
 
@@ -252,6 +256,7 @@ def main() -> None:
     parser.add_argument("--category-id", type=int, default=DEFAULT_DAILY_LOG_CATEGORY_ID, help="LVPD daily-log document category ID.")
     parser.add_argument("--sleep", type=float, default=0.15, help="Delay between HTTP requests in seconds.")
     args = parser.parse_args()
+    LOGGER.info("Scraper started: output_csv=%s, output_zip=%s", args.output_csv, args.output_zip or "disabled")
 
     session = make_session()
     context = fetch_news_page_context(session)
@@ -278,8 +283,10 @@ def main() -> None:
         failed_path = "failed_daily_log_downloads.csv"
         pd.DataFrame(failed).to_csv(failed_path, index=False)
         print(f"Failures: {len(failed)} — saved details to {failed_path}")
+        LOGGER.warning("Scraper finished with %s failed PDF(s); details saved to %s", len(failed), failed_path)
     else:
         print("Failures: 0")
+        LOGGER.info("Scraper finished successfully: %s rows from %s PDFs", len(daily_logs_df), len(pdf_df))
 
 
 if __name__ == "__main__":

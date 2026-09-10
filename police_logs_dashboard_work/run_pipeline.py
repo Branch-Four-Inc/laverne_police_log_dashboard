@@ -24,19 +24,25 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pipeline_logging import get_logger, install_exception_logger
+
 HERE = Path(__file__).resolve().parent
 SCRAPER = HERE / "lvpd_scrape_daily_logs.py"
 TRANSFORMER = HERE / "transform_and_geocode.py"
 OUTPUT_DIR = HERE / "output"
 RAW_CSV = OUTPUT_DIR / "raw_scraped.csv"
 GEOCODE_CACHE = OUTPUT_DIR / "geocode_cache.json"
+LOGGER = get_logger()
+install_exception_logger(LOGGER)
 
 
 def run(cmd: list[str]) -> None:
     print(f"\n$ {' '.join(str(c) for c in cmd)}\n{'─' * 60}")
+    LOGGER.info("Running command: %s", " ".join(str(c) for c in cmd))
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         print(f"\n[error] Command exited with code {result.returncode}. Stopping pipeline.")
+        LOGGER.error("Command exited with code %s: %s", result.returncode, " ".join(str(c) for c in cmd))
         sys.exit(result.returncode)
 
 
@@ -47,6 +53,7 @@ def main() -> None:
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding step.")
     parser.add_argument("--no-zip", action="store_true", help="Skip saving the PDF ZIP archive (saves disk space).")
     args = parser.parse_args()
+    LOGGER.info("Pipeline started: skip_geocode=%s, no_zip=%s", args.skip_geocode, args.no_zip)
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -83,6 +90,7 @@ def main() -> None:
     print(f"\nNext: copy these two files to the dashboard repo root:")
     print(f"  {OUTPUT_DIR}/daily_logs.csv")
     print(f"  {OUTPUT_DIR}/daily_logs_geocoded.csv")
+    LOGGER.info("Pipeline completed successfully")
 
 
 if __name__ == "__main__":

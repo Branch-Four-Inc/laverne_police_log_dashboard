@@ -20,6 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from pipeline_logging import get_logger, install_exception_logger
+
+
+LOGGER = get_logger()
+install_exception_logger(LOGGER)
 
 
 # These are the human-readable descriptions for the raw nature codes LVPD uses.
@@ -185,6 +190,7 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     bad = df["reported"].isna().sum()
     if bad:
         print(f"[warn] Dropping {bad} rows with unparseable 'reported' timestamps.")
+        LOGGER.warning("Dropping %s rows with unparseable reported timestamps", bad)
     df = df.dropna(subset=["reported"]).copy()
 
     df = df[df["reported"] <= CUTOFF_DATE].copy()
@@ -197,6 +203,7 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     dropped = before - len(df)
     if dropped:
         print(f"[info] Dropped {dropped} duplicate rows (same incident ID logged twice).")
+        LOGGER.info("Dropped %s duplicate incident IDs", dropped)
 
     # App expects "YYYY-MM-DD" for the date column and "YYYY-MM-DD HH:MM:SS" for reported
     df["date"] = df["reported"].dt.date.astype(str)
@@ -327,6 +334,7 @@ def main() -> None:
     parser.add_argument("--geocode-cache", default="geocode_cache.json", help="Path to geocoding cache JSON (created if missing)")
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding and only output daily_logs.csv")
     args = parser.parse_args()
+    LOGGER.info("Transformer started: input=%s, output_dir=%s, skip_geocode=%s", args.input, args.output_dir, args.skip_geocode)
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -341,6 +349,7 @@ def main() -> None:
     logs_path = out_dir / "daily_logs.csv"
     df.to_csv(logs_path, index=False)
     print(f"Saved: {logs_path}")
+    LOGGER.info("Saved transformed CSV: %s (%s rows)", logs_path, len(df))
 
     if args.skip_geocode:
         print("\nSkipping geocoding (--skip-geocode flag set).")
@@ -353,6 +362,7 @@ def main() -> None:
     geo_path = out_dir / "daily_logs_geocoded.csv"
     df_geo.to_csv(geo_path, index=False)
     print(f"Saved: {geo_path}")
+    LOGGER.info("Saved geocoded CSV: %s (%s rows)", geo_path, len(df_geo))
 
     print("\nDone.")
 
