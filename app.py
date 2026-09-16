@@ -222,12 +222,13 @@ with st.expander("View Data Dictionary"):
 # --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
 st.subheader("Important")
 st.markdown('''
-            * Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
+            * **This dashboard is not for reporting emergencies or crimes. For an emergency, call 911.** 
             * This dashboard shows reported incidents and is intended for informational purposes only.
-            * This dashboard may make mistakes. 
+            * This dashboard may contain mistakes. Please report mistakes to: newstips@lavernedaily.org
             * Reported incidents do not necessarily mean that a crime occurred or that anyone was arrested or found responsible.
             * Incident information may be updated or corrected over time.
-            * This dashboard is not for reporting emergencies or crimes. For an emergency, call 911.
+            * Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
+           
             
             ''')
             
