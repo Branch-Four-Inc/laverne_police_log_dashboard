@@ -20,7 +20,7 @@ import pandas as pd
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
-from pipeline_logging import get_logger, install_exception_logger
+from utils import get_logger, install_exception_logger
 
 
 NEWS_URL = "https://lvpd.org/news-statistics"

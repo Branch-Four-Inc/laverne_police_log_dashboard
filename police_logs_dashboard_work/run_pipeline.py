@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-from pipeline_logging import get_logger, install_exception_logger
+from utils import get_logger, install_exception_logger
 
 HERE = Path(__file__).resolve().parent
 SCRAPER = HERE / "lvpd_scrape_daily_logs.py"

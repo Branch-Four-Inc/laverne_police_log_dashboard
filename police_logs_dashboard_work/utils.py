@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-LOG_PATH = Path(__file__).resolve().parent / "output" / "scraper.log"
+LOG_PATH = Path(__file__).resolve().parent / "output" / "log_files" / "scraper.log"
 LOGGER_NAME = "lvpd_pipeline"
 
 

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-from pipeline_logging import get_logger, install_exception_logger
+from utils import get_logger, install_exception_logger
 
 
 LOGGER = get_logger()

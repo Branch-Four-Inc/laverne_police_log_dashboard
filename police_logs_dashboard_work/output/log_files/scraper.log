@@ -1,0 +1,8 @@
+2026-09-30 16:38:58,342 | INFO     | Scraper started: output_csv=daily_logs.csv, output_zip=lvpd_daily_logs.zip, request_delay=0.5s
+2026-09-30 16:38:58,815 | CRITICAL | Unhandled exception
+Traceback (most recent call last):
+  File "c:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 439, in <module>
+    main()
+  File "c:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 411, in main
+    STOP
+NameError: name 'STOP' is not defined
