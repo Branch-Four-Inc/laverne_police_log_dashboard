@@ -41,7 +41,9 @@ MONTH_NAMES = {
 
 
 def structural_error(message: str) -> None:
-    """Log a source-format change before stopping the affected scrape step."""
+    
+    """Log an error in the document or PDF format"""
+    
     LOGGER.error("Structural validation failed: %s", message)
     raise RuntimeError(f"Structural validation failed: {message}")
 
@@ -63,7 +65,8 @@ def make_session(request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS) -
     return session
 
 
-def set_request_delay(session: requests.Session, request_delay_seconds: float) -> None:
+def set_request_delay(session: requests.Session, 
+                      request_delay_seconds: float) -> None:
     """Configure the minimum spacing between all requests made by this session."""
     if request_delay_seconds < 0:
         raise ValueError("request_delay_seconds cannot be negative")
@@ -74,6 +77,7 @@ def wait_for_request_slot(session: requests.Session) -> None:
     """Wait until this session has respected its minimum request interval."""
     delay = getattr(session, "lvpd_request_delay_seconds", DEFAULT_REQUEST_DELAY_SECONDS)
     last_request_at = getattr(session, "lvpd_last_request_at", None)
+    
     if last_request_at is not None:
         remaining = delay - (time.monotonic() - last_request_at)
         if remaining > 0:
@@ -90,7 +94,7 @@ def get_with_retries(
 ) -> requests.Response:
     """Require HTTP 200 and retry temporary or suspicious responses.
 
-    The minimum-size check is used for daily-log PDFs, where a tiny response
+    The minimum-size check is used for daily-log PDFs, where a tiny-size response
     commonly means an error or block page was returned instead of a real PDF.
     """
     last_error: Exception | None = None
@@ -99,18 +103,27 @@ def get_with_retries(
         try:
             wait_for_request_slot(session)
             response = session.get(url, **kwargs)
+            
+            # check if accessing website works
             if response.status_code != 200:
-                raise RuntimeError(f"HTTP {response.status_code}")
+                LOGGER.error(f"Attempted request was not successful, returned status code {response.status_code}")
+                raise RuntimeError(f"Attempted request was not successful, returned status code {response.status_code}")
+            
+            # check if 
             if min_bytes is not None and len(response.content) < min_bytes:
+                LOGGER.error(f"Accessing site gave suspiciously small response: {len(response.content):,} bytes (minimum {min_bytes:,}")
                 raise RuntimeError(
-                    f"suspiciously small response: {len(response.content):,} bytes (minimum {min_bytes:,})"
+                    f"Accessing site gave suspiciously small response: {len(response.content):,} bytes (minimum {min_bytes:,})"
                 )
             return response
+        
+        # If accessing site fails, try again 
         except (requests.RequestException, RuntimeError) as exc:
             last_error = exc
             if attempt == MAX_HTTP_ATTEMPTS:
                 break
             delay = RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
+            
             print(f"[warn] Request failed ({exc}); retrying in {delay}s ({attempt}/{MAX_HTTP_ATTEMPTS})")
             LOGGER.warning(
                 "Request to %s failed on attempt %s/%s: %s; retrying in %ss",
@@ -123,12 +136,15 @@ def get_with_retries(
             time.sleep(delay)
 
     print(f"[error] Could not access {url} after {MAX_HTTP_ATTEMPTS} attempts: {last_error}")
+    
     LOGGER.error("Could not access %s after %s attempts: %s", url, MAX_HTTP_ATTEMPTS, last_error)
     raise RuntimeError(f"Could not access {url}") from last_error
 
 
 def fetch_news_page_context(session: requests.Session) -> dict:
+    
     """Fetch the LVPD news/statistics page and extract helpful context from embedded scripts/HTML."""
+    
     response = get_with_retries(session, NEWS_URL, timeout=30)
     soup = BeautifulSoup(response.content, "lxml")
 
@@ -182,7 +198,9 @@ def fetch_daily_log_pdf_index(
     category_id: int = DEFAULT_DAILY_LOG_CATEGORY_ID,
     sleep_seconds: float = 0.2,
 ) -> pd.DataFrame:
+    
     """Fetch all Document Library Pro PDF records from the LVPD daily-logs category."""
+    
     set_request_delay(session, sleep_seconds)
     all_docs = []
     page = 1
@@ -204,14 +222,17 @@ def fetch_daily_log_pdf_index(
             docs = response.json()
         except ValueError as exc:
             structural_error(f"PDF index page {page} was not valid JSON: {exc}")
+            
         if not isinstance(docs, list):
             structural_error(f"PDF index page {page} returned {type(docs).__name__}, not a document list")
+            
         if not docs:
             if page == 1:
                 structural_error("PDF index returned zero documents on its first page")
             break
 
         required_fields = {"title", "download_url"}
+        
         for index, doc in enumerate(docs, start=1):
             missing_fields = required_fields - set(doc)
             title = doc.get("title")
@@ -229,6 +250,7 @@ def fetch_daily_log_pdf_index(
 
         page += 1
 
+    # combine to one df 
     pdf_df = pd.DataFrame([
         {
             "title": doc["title"]["rendered"],
@@ -248,12 +270,15 @@ def fetch_daily_log_pdf_index(
 
 
 def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
+    
     """Parse one daily log PDF using character x-positions to extract table columns."""
+    
     col_bounds = [0, 95, 190, 280, 9999]
     col_names = ["incident", "reported", "nature", "incident_address"]
 
     rows = []
     table_header_found = False
+    
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
             chars = page.chars
@@ -282,8 +307,9 @@ def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
                     populated_columns = sum(bool(value) for value in col_texts.values())
                     if populated_columns < len(col_names):
                         structural_error(
-                            f"daily-log table header had {populated_columns}/{len(col_names)} expected columns"
+                            f"daily-log table header had {populated_columns}/{len(col_names)} expected columns on {page}"
                         )
+                        
                     table_header_found = True
                     continue
                 if not col_texts["incident"]:
@@ -303,7 +329,9 @@ def download_and_parse_daily_logs(
     output_zip: str | None = "lvpd_daily_logs.zip",
     sleep_seconds: float = 0.15,
 ) -> tuple[pd.DataFrame, list[dict]]:
+    
     """Download all daily log PDFs, optionally zip them, and parse incident rows."""
+    
     set_request_delay(session, sleep_seconds)
     log_pdfs = pdf_df[pdf_df["title"] != "Crime Reports Legend"].copy()
     print(f"Daily log PDFs to process: {len(log_pdfs)}")

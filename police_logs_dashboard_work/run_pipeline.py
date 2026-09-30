@@ -23,6 +23,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from datetime import datetime
 
 from pipeline_logging import get_logger, install_exception_logger
 
@@ -37,6 +38,10 @@ install_exception_logger(LOGGER)
 
 
 def run(cmd: list[str]) -> None:
+    """
+    Start logger for file. If program dails, return return code and closes program
+    """
+    
     print(f"\n$ {' '.join(str(c) for c in cmd)}\n{'─' * 60}")
     LOGGER.info("Running command: %s", " ".join(str(c) for c in cmd))
     result = subprocess.run(cmd, check=False)
@@ -53,7 +58,9 @@ def main() -> None:
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding step.")
     parser.add_argument("--no-zip", action="store_true", help="Skip saving the PDF ZIP archive (saves disk space).")
     args = parser.parse_args()
-    LOGGER.info("Pipeline started: skip_geocode=%s, no_zip=%s", args.skip_geocode, args.no_zip)
+    
+    start_time = datetime.now()
+    LOGGER.info("Pipeline started at %s: skip_geocode=%s, no_zip=%s", start_time, args.skip_geocode, args.no_zip)
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -84,13 +91,16 @@ def main() -> None:
     # Print a summary of what was produced
     print(f"\n{'=' * 60}")
     print("Pipeline complete. Output files:")
+    
     for f in sorted(OUTPUT_DIR.iterdir()):
         size_kb = f.stat().st_size / 1024
         print(f"  {f.name:<35} {size_kb:>8.1f} KB")
+        
     print(f"\nNext: copy these two files to the dashboard repo root:")
     print(f"  {OUTPUT_DIR}/daily_logs.csv")
     print(f"  {OUTPUT_DIR}/daily_logs_geocoded.csv")
-    LOGGER.info("Pipeline completed successfully")
+    
+    LOGGER.info(f"Pipeline completed successfully. Time to completion: {datetime.now() - start_time}")
 
 
 if __name__ == "__main__":
