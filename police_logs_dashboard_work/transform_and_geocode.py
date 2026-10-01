@@ -9,18 +9,27 @@ Usage:
     python transform_and_geocode.py --input raw_scraped.csv
     python transform_and_geocode.py --input raw_scraped.csv --skip-geocode
     python transform_and_geocode.py --input raw_scraped.csv --geocode-cache geocode_cache.json
+    python transform_and_geocode.py --input raw_scraped.csv --allow-validation-failures
 
 Outputs go to the current directory unless you pass --output-dir.
+
+The raw data gets validated (validation.py) before anything is written. If it fails, the script
+exits with code 2 and the CSVs and the geocode cache are left exactly as they were.
 """
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
 import pandas as pd
 import requests
 from utils import get_logger, install_exception_logger
+from validation import DataValidationError, previous_month_end, validate_raw_data
+
+# distinct from a crash (1) so whatever runs this later can tell "bad data" from "broken script"
+VALIDATION_FAILED_EXIT_CODE = 2
 
 
 LOGGER = get_logger()
@@ -183,9 +192,10 @@ NATURE_DESCRIPTIONS = dict(zip(desc["nature"], desc['Description'] ))
 # Jan 1-2 PDFs had weird formatting that broke the parser, so we skip them
 SKIP_DATES = {"01.01.2026", "01.02.2026"}
 
-# Automatically set the cutoff to the last day of the previous month so we
-# don't have to remember to update this manually on every monthly refresh
-CUTOFF_DATE = pd.Timestamp.now().replace(day=1) - pd.Timedelta(days=1)
+# Automatically set the cutoff to the end of the previous month so we don't have to remember to
+# update this manually on every monthly refresh. Last SECOND of the month on purpose -- the old
+# version kept the current time of day, so a 4:40 PM run cut off the rest of the last day.
+CUTOFF_DATE = previous_month_end()
 
 CITY = "La Verne, CA"
 
@@ -205,15 +215,8 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df[df["reported"] <= CUTOFF_DATE].copy()
 
-    # LVPD's daily PDFs sometimes carry the tail end of one day over into the next day's
-    # post, so the scraper picks up the same incident twice under two different log_dates.
-    # The incident ID is the real unique key -- keep the first sighting, drop the repeat.
-    before = len(df)
-    df = df.drop_duplicates(subset=["incident"], keep="first")
-    dropped = before - len(df)
-    if dropped:
-        print(f"[info] Dropped {dropped} duplicate rows (same incident ID logged twice).")
-        LOGGER.info("Dropped %s duplicate incident IDs", dropped)
+    # Duplicate incident IDs (LVPD repeats the tail of one day in the next day's PDF) are
+    # dropped and counted in validation.py now, so by the time we get here there are none.
 
     # App expects "YYYY-MM-DD" for the date column and "YYYY-MM-DD HH:MM:SS" for reported
     df["date"] = df["reported"].dt.date.astype(str)
@@ -343,8 +346,11 @@ def main() -> None:
     parser.add_argument("--output-dir", default=".", help="Directory to write output CSVs (default: current dir)")
     parser.add_argument("--geocode-cache", default="geocode_cache.json", help="Path to geocoding cache JSON (created if missing)")
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding and only output daily_logs.csv")
+    parser.add_argument("--allow-validation-failures", action="store_true",
+                        help="Log validation failures but keep going anyway (for when you've checked the data and know it's fine)")
     args = parser.parse_args()
-    LOGGER.info("Transformer started: input=%s, output_dir=%s, skip_geocode=%s", args.input, args.output_dir, args.skip_geocode)
+    LOGGER.info("Transformer started: input=%s, output_dir=%s, skip_geocode=%s, allow_validation_failures=%s",
+                args.input, args.output_dir, args.skip_geocode, args.allow_validation_failures)
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -353,7 +359,18 @@ def main() -> None:
     raw = pd.read_csv(args.input, dtype=str).fillna("")
     print(f"Loaded {len(raw):,} raw rows from {args.input}")
 
-    print(f"\n=== Step 2: Transform ===")
+    # Nothing gets written (CSVs or geocode cache) until this passes
+    print(f"\n=== Step 2: Validate ===")
+    try:
+        raw = validate_raw_data(raw, cutoff=CUTOFF_DATE, allow_failures=args.allow_validation_failures)
+    except DataValidationError as exc:
+        LOGGER.error("Validation failed, stopping before anything is written: %s", exc)
+        print(f"\n[validation failed] {exc}")
+        print("Nothing was written: the output CSVs and the geocode cache are untouched.")
+        print("If you've looked at the data and it's actually fine, re-run with --allow-validation-failures.")
+        sys.exit(VALIDATION_FAILED_EXIT_CODE)
+
+    print(f"\n=== Step 3: Transform ===")
     df = transform(raw)
 
     logs_path = out_dir / "daily_logs.csv"
@@ -365,7 +382,7 @@ def main() -> None:
         print("\nSkipping geocoding (--skip-geocode flag set).")
         return
 
-    print(f"\n=== Step 3: Geocode ===")
+    print(f"\n=== Step 4: Geocode ===")
     cache_path = Path(args.geocode_cache)
     df_geo = geocode_dataframe(df, cache_path)
 

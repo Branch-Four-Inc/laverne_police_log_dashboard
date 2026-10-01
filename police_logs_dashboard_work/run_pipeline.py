@@ -57,6 +57,8 @@ def main() -> None:
                         help="Monthly mode: scrape latest PDFs and merge new rows into existing output CSVs.")
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding step.")
     parser.add_argument("--no-zip", action="store_true", help="Skip saving the PDF ZIP archive (saves disk space).")
+    parser.add_argument("--allow-validation-failures", action="store_true",
+                        help="Keep going even if the data validation step fails (check the log first!).")
     args = parser.parse_args()
     
     start_time = datetime.now()
@@ -86,6 +88,8 @@ def main() -> None:
     ]
     if args.skip_geocode:
         transform_cmd.append("--skip-geocode")
+    if args.allow_validation_failures:
+        transform_cmd.append("--allow-validation-failures")
     run(transform_cmd)
 
     # Print a summary of what was produced
