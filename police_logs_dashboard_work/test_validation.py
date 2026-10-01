@@ -22,8 +22,12 @@ CUTOFF = pd.Timestamp("2026-05-31 23:59:59")   # target month = May 2026
 NOW = pd.Timestamp("2026-06-15 12:00:00")
 
 
-def make_rows(month: str, n: int, id_start: int = 1, **overrides) -> pd.DataFrame:
+def make_rows(month: str, 
+              n: int, 
+              id_start: int = 1, **overrides) -> pd.DataFrame:
+    
     """n clean raw-scraper rows spread across `month` (e.g. '2026-03')."""
+    
     p = pd.Period(month, "M")
     rows = []
     for i in range(n):
@@ -41,8 +45,12 @@ def make_rows(month: str, n: int, id_start: int = 1, **overrides) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
-def one_row(reported: str, incident: str, log_date: str, **overrides) -> pd.DataFrame:
+def one_row(reported: str, 
+            incident: str, 
+            log_date: str, **overrides) -> pd.DataFrame:
+    
     """A single raw row with the `reported` string exactly as given (to hand-craft edge cases)."""
+    
     row = {"log_date": log_date, "incident": incident, "reported": reported,
            "nature": "PDOBS", "incident_address": "123 MAIN ST"}
     row.update(overrides)
@@ -50,7 +58,9 @@ def one_row(reported: str, incident: str, log_date: str, **overrides) -> pd.Data
 
 
 def healthy(per_month: int = 100) -> pd.DataFrame:
+    
     """Feb-May 2026, same row count every month, nothing wrong with any of it."""
+    
     return pd.concat([make_rows(m, per_month) for m in ("2026-02", "2026-03", "2026-04", "2026-05")],
                      ignore_index=True)
 
@@ -237,7 +247,13 @@ class TestDuplicates(Quiet):
 
 
 class TestRowCount(Quiet):
-    def months(self, may: int, others: int = 100) -> pd.DataFrame:
+    
+    """Set one's row counts and all others to default 100"""
+    
+    def months(self, 
+               may: int, 
+               others: int = 100) -> pd.DataFrame:
+        
         return pd.concat([make_rows("2026-02", others), make_rows("2026-03", others),
                           make_rows("2026-04", others), make_rows("2026-05", may)], ignore_index=True)
 
@@ -246,8 +262,9 @@ class TestRowCount(Quiet):
 
     def test_lower_edge_is_inclusive_at_50_percent(self):
         self.assertEqual(len(run(self.months(may=50))), 350)
+        
         with self.assertRaisesRegex(DataValidationError, "Row count too low"):
-            run(self.months(may=49))
+            run(self.months(may=22))
 
     def test_upper_edge_is_inclusive_at_250_percent(self):
         self.assertEqual(len(run(self.months(may=250))), 550)
@@ -270,9 +287,11 @@ class TestRowCount(Quiet):
         self.assertTrue(any("no earlier months" in m for m in logs.output))
 
     def test_works_with_fewer_than_three_baseline_months(self):
+        
         df = pd.concat([make_rows("2026-04", 100), make_rows("2026-05", 100)], ignore_index=True)
         self.assertEqual(len(run(df)), 200)
-        low = pd.concat([make_rows("2026-04", 100), make_rows("2026-05", 40)], ignore_index=True)
+        low = pd.concat([make_rows("2026-04", 100), make_rows("2026-05", 22)], ignore_index=True)
+        
         with self.assertRaisesRegex(DataValidationError, "Row count too low"):
             run(low)
 

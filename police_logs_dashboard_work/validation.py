@@ -65,7 +65,7 @@ MAX_MISSING_REQUIRED_RATE = 0.25
 MAX_DUPLICATE_RATE = 0.10
 
 # New month's row count compared with the trailing 3-month average.
-ROW_COUNT_MIN_RATIO = 0.50
+ROW_COUNT_MIN_RATIO = 0.25 # lowered to .25, some months may be much slower than others like holidays, summer vacation
 ROW_COUNT_MAX_RATIO = 2.50
 BASELINE_MONTHS = 3
 
@@ -95,18 +95,23 @@ def _is_blank(s: pd.Series) -> pd.Series:
     return s.fillna("").astype(str).str.strip() == ""
 
 
-def _from_target_month(df: pd.DataFrame, target: pd.Period) -> pd.Series:
+def _from_target_month(df: pd.DataFrame, 
+                       target: pd.Period) -> pd.Series:
     """Rows that came from PDFs titled with a date in the target month.
 
     Goes by log_date rather than `reported` because `reported` is one of the fields that can be
     garbage, and we still want those rows counted against the month they came from.
     """
     log_dt = pd.to_datetime(df["log_date"], format=LOG_DATE_FORMAT, errors="coerce")
+    
     return log_dt.dt.to_period("M") == target
 
 
 # ── 1. schema ───────────────────────────────────────────────────────────────────
 def check_schema(df: pd.DataFrame) -> None:
+    
+    """Check that the expected columns are correct"""
+    
     expected, actual = set(EXPECTED_RAW_COLUMNS), set(df.columns)
     missing, unexpected = sorted(expected - actual), sorted(actual - expected)
     if missing or unexpected:
@@ -119,14 +124,29 @@ def check_schema(df: pd.DataFrame) -> None:
 
 
 # ── 2. required fields ──────────────────────────────────────────────────────────
-def check_required_fields(df: pd.DataFrame, target: pd.Period, failures: list[str]) -> pd.DataFrame:
+def check_required_fields(df: pd.DataFrame, 
+                          target: pd.Period, 
+                          failures: list[str]) -> pd.DataFrame:
+    
+    """Checks all rows for any missing required fields. Also checks if the overall missings 
+    rate is above the acceptable threshold"""
+    
+    
+    # builds a dataframe identifying missing required columns for all dataframe rows
     missing = pd.DataFrame({label: _is_blank(df[col]) for label, col in REQUIRED_FIELDS.items()})
+    
+    
     # a timestamp that's there but doesn't parse (garbled PDF text) is as good as missing
     missing["date"] = missing["date"] | df["_dt"].isna()
     any_missing = missing.any(axis=1)
 
+    # check if all rows are in target month
     in_target = _from_target_month(df, target)
+    
+    # calculate overall missings rate
     overall_rate = any_missing.mean() if len(df) else 0.0
+    
+    # calculates target rate for rows that are in the target month
     target_rate = any_missing[in_target].mean() if in_target.any() else 0.0
     by_field = {k: int(v) for k, v in missing.sum().items() if v}
 
@@ -148,11 +168,17 @@ def check_required_fields(df: pd.DataFrame, target: pd.Period, failures: list[st
         )
     else:
         _say(logging.INFO, "Required fields: all %s rows complete", f"{len(df):,}")
+        
+    # returns df dropping rows with any missing required fields    
     return df[~any_missing]
 
 
 # ── 3. date range ───────────────────────────────────────────────────────────────
-def drop_out_of_range_dates(df: pd.DataFrame, cutoff: pd.Timestamp, now: pd.Timestamp) -> pd.DataFrame:
+def drop_out_of_range_dates(df: pd.DataFrame, 
+                            cutoff: pd.Timestamp, 
+                            now: pd.Timestamp) -> pd.DataFrame:
+    """Remove rows with log dates that are too old, in the future, or in progress """
+    
     dt = df["_dt"]
     future = dt > now
     too_old = dt < EARLIEST_VALID_DATE
@@ -175,10 +201,18 @@ def drop_out_of_range_dates(df: pd.DataFrame, cutoff: pd.Timestamp, now: pd.Time
 
 
 # ── 4. duplicates ───────────────────────────────────────────────────────────────
-def drop_duplicate_incidents(df: pd.DataFrame, target: pd.Period, failures: list[str]) -> pd.DataFrame:
+def drop_duplicate_incidents(df: pd.DataFrame, 
+                             target: pd.Period, 
+                             failures: list[str]) -> pd.DataFrame:
+    
+    """Drop rows with duplicate incident ids, conflicting incidents, and calculate if duplicate rate is within acceptable
+    threshold"""
+    
     dup = df.duplicated("incident", keep="first")  # same keep-first as before, so output doesn't shift
     in_target = _from_target_month(df, target)
     overall_rate = dup.mean() if len(df) else 0.0
+    
+    # get rate of duplicates in target month
     target_rate = dup[in_target].mean() if in_target.any() else 0.0
 
     for scope, rate in (("all", overall_rate), (f"{target} PDF", target_rate)):
@@ -205,8 +239,15 @@ def drop_duplicate_incidents(df: pd.DataFrame, target: pd.Period, failures: list
 
 
 # ── 5. row count ────────────────────────────────────────────────────────────────
-def check_row_count(df: pd.DataFrame, target: pd.Period, failures: list[str]) -> None:
+def check_row_count(df: pd.DataFrame, 
+                    target: pd.Period, 
+                    failures: list[str]) -> None:
+    
+    
+    # get number of rows for each month
     counts = df.groupby(df["_dt"].dt.to_period("M")).size()
+    
+    # get number of rows for target month
     target_count = int(counts.get(target, 0))
 
     # No rows for the month at all always fails, even with nothing to compare against --
@@ -223,6 +264,7 @@ def check_row_count(df: pd.DataFrame, target: pd.Period, failures: list[str]) ->
         _say(logging.WARNING, "Row count: no earlier months to compare %s against, skipping this check", target)
         return
 
+    # average # rows per month
     avg = sum(baseline.values()) / len(baseline)
     ratio = target_count / avg
     detail = f"{target_count:,} rows in {target} vs {avg:,.0f} avg of {list(baseline)} ({ratio:.0%})"
@@ -245,9 +287,10 @@ def validate_raw_data(
     now: pd.Timestamp | None = None,
     allow_failures: bool = False,
 ) -> pd.DataFrame:
+    
     """Run all checks on the raw scraper output and return the cleaned rows.
 
-    Raises DataValidationError if anything fails, unless allow_failures is set (then the failures
+    Raises DataValidationError if anything fails, unless allow_failures is True (then the failures
     are still logged as errors, but we carry on with the cleaned data). A schema mismatch always
     raises -- there's nothing sensible to carry on with.
     """
@@ -269,6 +312,7 @@ def validate_raw_data(
     if failures:
         if not allow_failures:
             raise DataValidationError("; ".join(failures))
+        
         _say(logging.WARNING, "%s validation failure(s) ignored (--allow-validation-failures)", len(failures))
     else:
         _say(logging.INFO, "Validation passed: %s rows in, %s rows out", f"{len(raw):,}", f"{len(df):,}")
