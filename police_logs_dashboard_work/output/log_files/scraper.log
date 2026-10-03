@@ -6,3 +6,25 @@ Traceback (most recent call last):
   File "c:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 411, in main
     STOP
 NameError: name 'STOP' is not defined
+2026-10-02 10:32:10,300 | INFO     | Scraper started: output_csv=daily_logs.csv, output_zip=lvpd_daily_logs.zip, request_delay=0.5s
+2026-10-02 10:32:13,206 | ERROR    | Structural validation failed: PDF index page 2, document 58 is missing expected title.rendered or download_url fields
+2026-10-02 10:32:13,206 | CRITICAL | Unhandled exception
+Traceback (most recent call last):
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 438, in <module>
+    main()
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 411, in main
+    pdf_df = fetch_daily_log_pdf_index(session, category_id=args.category_id, sleep_seconds=args.sleep)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 240, in fetch_daily_log_pdf_index
+    structural_error(
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py", line 48, in structural_error
+    raise RuntimeError(f"Structural validation failed: {message}")
+RuntimeError: Structural validation failed: PDF index page 2, document 58 is missing expected title.rendered or download_url fields
+2026-10-02 10:48:18,739 | ERROR    | Structural validation failed: PDF index page 2, document 58 is missing expected title.rendered or download_url fields
+2026-10-02 11:48:48,791 | WARNING  | Structural validation failed: PDF index page 2, document 57 is missing expected download_url
+2026-10-02 11:50:44,216 | WARNING  | Structural validation failed: PDF index page 2, document 57 is missing expected download_url
+2026-10-02 16:37:14,284 | WARNING  | Request to False failed on attempt 1/4: Invalid URL 'False': No scheme supplied. Perhaps you meant https://False?; retrying in 1s
+2026-10-02 16:37:15,299 | WARNING  | Request to False failed on attempt 2/4: Invalid URL 'False': No scheme supplied. Perhaps you meant https://False?; retrying in 2s
+2026-10-02 16:37:17,301 | WARNING  | Request to False failed on attempt 3/4: Invalid URL 'False': No scheme supplied. Perhaps you meant https://False?; retrying in 4s
+2026-10-02 16:37:21,305 | ERROR    | Could not access False after 4 attempts: Invalid URL 'False': No scheme supplied. Perhaps you meant https://False?
+2026-10-02 16:37:21,305 | ERROR    | Could not download or parse 04.26.2026 (False): Could not access False

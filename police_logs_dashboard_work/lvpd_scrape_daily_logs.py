@@ -40,12 +40,17 @@ MONTH_NAMES = {
 }
 
 
-def structural_error(message: str) -> None:
+def structural_error(message: str, 
+                     error = True) -> None:
     
     """Log an error in the document or PDF format"""
     
-    LOGGER.error("Structural validation failed: %s", message)
-    raise RuntimeError(f"Structural validation failed: {message}")
+    if error:
+        LOGGER.error("Structural validation failed: %s", message)
+        raise RuntimeError(f"Structural validation failed: {message}")
+    else:
+        LOGGER.warning("Structural validation failed: %s", message)
+        print("Structural validation failed: %s", message)
 
 
 def make_session(request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS) -> requests.Session:
@@ -199,10 +204,17 @@ def fetch_daily_log_pdf_index(
     sleep_seconds: float = 0.2,
 ) -> pd.DataFrame:
     
-    """Fetch all Document Library Pro PDF records from the LVPD daily-logs category."""
+    """Fetch all Document Library Pro PDF records from the LVPD daily-logs category.
+    Returns DF of all available PDF records and list of bad PDFs that can't be processed
+    
+    EDIT DATES IN THIS FUNCTION TO FILTER FOR CERTAIN MONTHS
+    
+    CHECK INDEX WHEN BAD_DOC IS DROPPED 
+    """
     
     set_request_delay(session, sleep_seconds)
     all_docs = []
+    bad_docs = []
     page = 1
 
     while True:
@@ -236,10 +248,36 @@ def fetch_daily_log_pdf_index(
         for index, doc in enumerate(docs, start=1):
             missing_fields = required_fields - set(doc)
             title = doc.get("title")
-            if missing_fields or not isinstance(title, dict) or not title.get("rendered") or not doc.get("download_url"):
+            
+            issues = 0
+            
+            # separate validations to understand exact error with PDF 
+            if missing_fields:
                 structural_error(
-                    f"PDF index page {page}, document {index} is missing expected title.rendered or download_url fields"
+                    f"PDF index page {page}, document {index-1} is missing a required field", 
+                    False
                 )
+                issues += 1
+                
+            if not isinstance(title, dict) or not title.get("rendered"):
+                structural_error(
+                    f"PDF index page {page}, document {index-1} is missing expected title.rendered",
+                    False
+                )    
+                issues += 1
+                
+                
+            if not doc.get("download_url"):
+                structural_error(
+                    f"PDF index page {page}, document {index-1} is missing expected download_url", 
+                    False
+                )  
+                issues += 1
+            
+            # create list of all PDFs that can't be processed    
+            if issues > 0:
+                bad_docs.append(doc) 
+                docs = docs.drop(index-1)  # remove the bad document from the list
 
         all_docs.extend(docs)
         total_pages = int(response.headers.get("X-WP-TotalPages", 1))
@@ -266,7 +304,7 @@ def fetch_daily_log_pdf_index(
     if pdf_df.empty:
         return pd.DataFrame(columns=["title", "pdf_url", "filename", "file_size", "date_posted", "page_url"])
 
-    return pdf_df.sort_values("title").reset_index(drop=True)
+    return pdf_df.sort_values("title").reset_index(drop=True), bad_docs
 
 
 def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
@@ -408,8 +446,10 @@ def main() -> None:
     print(f"Fresh nonce found: {context['ajax_nonce']}")
     print(f"Month folders found: {len(context['month_folders'])}")
 
-    pdf_df = fetch_daily_log_pdf_index(session, category_id=args.category_id, sleep_seconds=args.sleep)
+    pdf_df, bad_logs = fetch_daily_log_pdf_index(session, category_id=args.category_id, sleep_seconds=args.sleep)
     print(f"Total daily log PDF records found: {len(pdf_df)}")
+    print(f"Bad PDF records found: {len(bad_logs)}")
+    
     if not pdf_df.empty:
         print(f"Title range: {pdf_df['title'].min()} to {pdf_df['title'].max()}")
 
@@ -424,6 +464,7 @@ def main() -> None:
     daily_logs_df.to_csv(args.output_csv, index=False)
     print(f"Saved CSV: {args.output_csv} ({len(daily_logs_df):,} rows)")
 
+    #APPEND BAD DOCS & FAILED DOWNLOADS TO CSV
     if failed:
         failed_path = "failed_daily_log_downloads.csv"
         pd.DataFrame(failed).to_csv(failed_path, index=False)
