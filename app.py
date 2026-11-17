@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import pydeck as pdk
 import streamlit as st
-from datetime import date
+from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
 
@@ -10,8 +10,9 @@ st.set_page_config(page_title="Police Incidents", layout="wide")
 
 DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 # 33 incident types, so a single plotly palette (Safe has 11) would repeat colors.
-# Dark24 + Light24 gives 48 distinct colors; ordered so neighbors in the list contrast.
-CATEGORY_COLORS = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
+# Dark24 + Light24 has 48 colors; we use the first N_UNIQUE_COLORS of them.
+N_UNIQUE_COLORS = 35  # number of distinct category colors (colors only repeat past this many incident types)
+CATEGORY_COLORS = (px.colors.qualitative.Dark24 + px.colors.qualitative.Light24)[:N_UNIQUE_COLORS]
 # 12 a.m., 1 a.m., ... 11 p.m. — used to force chronological (not alphabetical) order on the heatmap x-axis
 HOUR_LABELS = [f"{h % 12 or 12} {'a.m.' if h < 12 else 'p.m.'}" for h in range(24)]
 
@@ -71,27 +72,17 @@ df, natures, color_map = load()
 min_date, max_date = df["log_date"].min().date(), df["log_date"].max().date()
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
-st.sidebar.header("Filters")
-st.sidebar.caption("Use the filters below to narrow the incidents you want to see. You can filter by Date, Incident Type, or Street Address.")
-
-# Widget labels render smaller than markdown text, so use a markdown label (same as "Incident Type")
-# and hide the built-in one.
-st.sidebar.markdown("**Date Range**")
-date_range = st.sidebar.date_input(
-    "Date Range", (min_date, max_date), min_value=min_date, max_value=max_date, label_visibility="collapsed"
-)
-
-st.sidebar.markdown("**Street Address Contains**")
-address_query = st.sidebar.text_input(
-    "Street Address Contains", placeholder="e.g. Foothill Blvd", label_visibility="collapsed"
-)
-
-# Buttons use on_click callbacks, which run before the widget below is built, so they can
-# safely set the multiselect's session_state value.
+# Defaults live in session_state so the "Reset all filters" button (main area) can restore them.
+if "f_dates" not in st.session_state:
+    st.session_state["f_dates"] = (min_date, max_date)
+if "f_address" not in st.session_state:
+    st.session_state["f_address"] = ""
 if "incident_type_filter" not in st.session_state:
     st.session_state["incident_type_filter"] = list(natures)
 
 
+# Buttons use on_click callbacks, which run before the widgets below are built, so they can
+# safely set the widgets' session_state values.
 def _select_all_types():
     st.session_state["incident_type_filter"] = list(natures)
 
@@ -99,6 +90,11 @@ def _select_all_types():
 def _clear_all_types():
     st.session_state["incident_type_filter"] = []
 
+
+def _reset_all_filters():
+    st.session_state["f_dates"] = (min_date, max_date)
+    st.session_state["f_address"] = ""
+    _select_all_types()
 
 
 # Make the Select all / Clear all buttons smaller (they're the only buttons in the sidebar)
@@ -110,6 +106,22 @@ st.sidebar.markdown(
     </style>""",
     unsafe_allow_html=True,
 )
+
+st.sidebar.header("Filters")
+st.sidebar.caption("Use the filters below to narrow the incidents you want to see. You can filter by Date, Incident Type, or Street Address.")
+
+# Widget labels render smaller than markdown text, so use a markdown label (same as "Incident Type")
+# and hide the built-in one.
+st.sidebar.markdown("**Date Range**")
+date_range = st.sidebar.date_input(
+    "Date Range", min_value=min_date, max_value=max_date, key="f_dates", label_visibility="collapsed"
+)
+
+st.sidebar.markdown("**Street Address Contains**")
+address_query = st.sidebar.text_input(
+    "Street Address Contains", placeholder="e.g. Foothill Blvd", key="f_address", label_visibility="collapsed"
+)
+
 st.sidebar.markdown("**Incident Type**")
 btn_all, btn_none = st.sidebar.columns(2)
 btn_all.button("Select all", on_click=_select_all_types, use_container_width=True)
@@ -129,25 +141,52 @@ start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 fdf = df[df["log_day"].between(start, end) & df["grouped_nature"].isin(selected)]
 
 
-# st.title("La Verne Police Incidents")
-# #st.subheader(f"{filter_start.strftime('%B %d')} to {filter_end.strftime('%B %d %Y')}: {len(fdf):,} reports")
-# st.divider()
-
 # Simple substring match so partial street names work (e.g. "foothill" matches "2269 FOOTHILL BLVD")
 if address_query:
     fdf = fdf[fdf["address_lc"].str.contains(address_query.strip().lower(), regex=False)]
 
 st.title("La Verne Police Incidents")
-count_col1, count_col2, count_col3 = st.columns(3)
+st.caption("Explore incidents reported to the La Verne Police Department. Use the filters in the sidebar to narrow what you see.")
+
+# ── All-incidents summary ─────────────────────────────────────────────────────
+# Built from the full dataset (`df`), never `fdf`, so it does not change with the sidebar filters.
+with st.container(border=True):
+    st.subheader("All Incidents Summary")
+    st.caption("Covers all dates and incident types. This section is not affected by the filters.")
+
+    n_days = df["log_day"].nunique()
+    busiest_dow = df["dow"].value_counts().idxmax()
+    busiest_hour = HOUR_LABELS[int(df["hour"].value_counts().idxmax())]
+    sum_cols = st.columns(4)
+    sum_cols[0].metric("Total Incidents", f"{len(df):,}")
+    sum_cols[1].metric("Dates Covered", f"{df['log_day'].min():%b %d, %Y} – {df['log_day'].max():%b %d, %Y}")
+    sum_cols[2].metric("Average per Day", f"{len(df) / n_days:,.1f}")
+    sum_cols[3].metric("Busiest Day & Hour", f"{busiest_dow}, {busiest_hour}")
+
+
+    top5 = df["grouped_nature"].value_counts().head(5)
+    top5_items = " &nbsp;·&nbsp; ".join(f"<b>{n}</b> ({c:,})" for n, c in top5.items())
+    st.markdown(f"**Top 5 incident types:** {top5_items}", unsafe_allow_html=True)
+
+# ── Filtered results ──────────────────────────────────────────────────────────
+st.subheader("Filtered Results")
+n_types = len(selected)
+type_text = "all incident types" if n_types == len(natures) else f"{n_types} of {len(natures)} incident types"
+filter_bits = [f"{start:%b %d, %Y} – {end:%b %d, %Y}", type_text]
+if address_query.strip():
+    filter_bits.append(f"address contains “{address_query.strip()}”")
+cap_col, reset_col = st.columns([5, 1], vertical_alignment="center")
+cap_col.caption(f"Showing **{len(fdf):,}** of {len(df):,} incidents  ·  " + "  ·  ".join(filter_bits))
+reset_col.button("Reset all filters", on_click=_reset_all_filters, use_container_width=True)
+count_col1, count_col2 = st.columns(2)
 share = f"{len(fdf) / len(df):.1%} of all incidents" if len(df) else None
 count_col1.metric("Filtered Incidents", f"{len(fdf):,}", share, delta_color="off")
-count_col2.metric("Total Incidents (all dates & natures)", f"{len(df):,}")
 if len(fdf):
     top_counts = fdf["grouped_nature"].value_counts()
-    count_col3.metric("Most Common Incident Type", str(top_counts.index[0]), f"{top_counts.iloc[0]:,} incidents",
+    count_col2.metric("Most Common Incident Type", str(top_counts.index[0]), f"{top_counts.iloc[0]:,} incidents",
                       delta_color="off")
 else:
-    count_col3.metric("Most Common Incident Type", "—")
+    count_col2.metric("Most Common Incident Type", "—")
 #st.caption("This dashboard shows all incidents reported to the La Verne Police Department in the selected filters. Data are sourced from the La Verne Police Department.")
 
 # With no matching incidents every chart would be empty, so show one message instead
@@ -254,6 +293,7 @@ else:
         y="dow",
         z="count",
         color_continuous_scale="Blues",
+        text_auto=True,  # print the count in each cell
         category_orders={"hour_label": HOUR_LABELS, "dow": DOW_ORDER},
         labels={"hour_label": "Hour of Day", "dow": "", "count": "Incidents"},
     )
@@ -263,7 +303,7 @@ else:
 
 
     # ── Table ────────────────────────────────────────────────────────────────
-    st.subheader("All Incidents")
+    st.subheader("Search Incidents")
     st.caption("The table lists all reported incidents.")
 
     fdf = fdf[['reported', 'grouped_nature', 'nature_description', 'incident_address']].rename({'reported': 'Report Date', 
@@ -340,14 +380,14 @@ with st.expander("View Data Dictionary"):
     st.dataframe(data_dict, hide_index=True, use_container_width=True)
 
 # --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
-st.subheader("Important")
+#with st.expander("About this data", expanded=True):
 st.markdown('''
-            * Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
-            * This dashboard shows reported incidents and is intended for informational purposes only.
-            * This dashboard may make mistakes. 
-            * Reported incidents do not necessarily mean that a crime occurred or that anyone was arrested or found responsible.
-            * Incident information may be updated or corrected over time.
-            * This dashboard is not for reporting emergencies or crimes. For an emergency, call 911.
-            
-            ''')
+        * Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
+        * This dashboard shows reported incidents and is intended for informational purposes only.
+        * This dashboard may make mistakes. 
+        * Reported incidents do not necessarily mean that a crime occurred or that anyone was arrested or found responsible.
+        * Incident information may be updated or corrected over time.
+        * This dashboard is not for reporting emergencies or crimes. For an emergency, call 911.
+        
+        ''')
             
