@@ -180,9 +180,16 @@ install_exception_logger(LOGGER)
 # NATURE_TO_GROUP = {nature: group for group, natures in GROUPS.items() for nature in natures}
 
 # read nature descriptions from file 
-desc = pd.read_excel("nature_descriptions.xlsx", index_col = 0)
+# (located relative to this file, not the current working directory, so it works from any folder;
+# the file lives in the repo root, one level above this script)
+NATURE_DESCRIPTIONS_PATH = Path(__file__).resolve().parent.parent / "nature_descriptions.xlsx"
+desc = pd.read_excel(NATURE_DESCRIPTIONS_PATH, index_col = 0)
 desc = desc.rename(columns = {"Code": "nature", 
                        "Incident Type": "grouped_nature"})
+
+# The scraped nature values are lowercase ("disturb noise") but the codes in the spreadsheet are
+# uppercase ("DISTURB NOISE"), so normalize both sides to lowercase/stripped before matching.
+desc["nature"] = desc["nature"].astype(str).str.strip().str.lower()
 
 # Build a dict mapping nature -> grouped_nature
 NATURE_TO_GROUP = dict(zip(desc["nature"], desc["grouped_nature"]))
@@ -223,9 +230,10 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df["reported"] = df["reported"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Falls back to the raw nature code if we don't have a description for it yet
-    df["nature_description"] = df["nature"].map(NATURE_DESCRIPTIONS).fillna(df["nature"])
+    nature_key = df["nature"].astype(str).str.strip().str.lower()
+    df["nature_description"] = nature_key.map(NATURE_DESCRIPTIONS).fillna(df["nature"])
 
-    df["grouped_nature"] = df["nature"].map(NATURE_TO_GROUP).fillna("Other")
+    df["grouped_nature"] = nature_key.map(NATURE_TO_GROUP).fillna("Other")
 
     # Match the column order the app expects
     df = df[["log_date", "incident", "reported", "nature", "incident_address", "nature_description", "date", "grouped_nature"]]
@@ -305,21 +313,44 @@ def geocode_address(raw_addr: str) -> tuple[float | None, float | None]:
     return None, None
 
 
+def _norm_addr(addr: str) -> str:
+    # Older cache entries are uppercase, newer scrapes are lowercase -- compare on one form
+    return str(addr).strip().lower()
+
+
+def _has_coords(entry) -> bool:
+    return bool(entry) and len(entry) == 2 and entry[0] is not None and entry[1] is not None
+
+
+def normalize_cache(raw_cache: dict) -> dict:
+    """Re-key the cache by normalized address. If two keys collide, keep the one with coordinates."""
+    out: dict[str, list] = {}
+    for addr, val in raw_cache.items():
+        key = _norm_addr(addr)
+        if key not in out or (_has_coords(val) and not _has_coords(out[key])):
+            out[key] = val
+    return out
+
+
 def geocode_dataframe(df: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
     # Load whatever we've already geocoded so we don't re-hit the API every run
     cache: dict[str, list] = {}
     if cache_path.exists():
         with open(cache_path) as f:
-            cache = json.load(f)
-        print(f"Loaded geocode cache: {len(cache)} addresses")
+            raw_cache = json.load(f)
+        cache = normalize_cache(raw_cache)
+        print(f"Loaded geocode cache: {len(raw_cache)} entries -> {len(cache)} unique addresses")
 
-    unique_addrs = df["incident_address"].dropna().unique()
-    to_geocode = [a for a in unique_addrs if a not in cache]
-    print(f"Addresses to geocode: {len(to_geocode)} new / {len(unique_addrs)} total")
+    # One lookup per normalized address; keep the first original spelling for the Census query
+    unique_addrs = {}
+    for a in df["incident_address"].dropna().unique():
+        unique_addrs.setdefault(_norm_addr(a), a)
+    to_geocode = [orig for key, orig in unique_addrs.items() if key not in cache]
+    print(f"Addresses to geocode using CENSUS geocoder: {len(to_geocode)} new / {len(unique_addrs)} total")
 
     for i, addr in enumerate(to_geocode, 1):
         lat, lon = geocode_address(addr)
-        cache[addr] = [lat, lon]
+        cache[_norm_addr(addr)] = [lat, lon]
         time.sleep(0.2)
         if i % 50 == 0:
             print(f"  Geocoded {i}/{len(to_geocode)}...")
@@ -332,8 +363,8 @@ def geocode_dataframe(df: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
     print(f"Geocode cache saved: {len(cache)} addresses → {cache_path}")
 
     df = df.copy()
-    df["lat"] = df["incident_address"].map(lambda a: cache.get(a, [None, None])[0])
-    df["lon"] = df["incident_address"].map(lambda a: cache.get(a, [None, None])[1])
+    df["lat"] = df["incident_address"].map(lambda a: cache.get(_norm_addr(a), [None, None])[0])
+    df["lon"] = df["incident_address"].map(lambda a: cache.get(_norm_addr(a), [None, None])[1])
 
     geocoded = df["lat"].notna().sum()
     print(f"Geocoded: {geocoded:,}/{len(df):,} rows ({geocoded/len(df)*100:.1f}%)")

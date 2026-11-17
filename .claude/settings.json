@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/stm4z/OneDrive - branchfour.org/Local Data Lab/Repositories/.streamlit/**)",
+      "Read(//c/Users/stm4z/OneDrive - branchfour.org/Local Data Lab/Repositories/**)"
+    ]
+  }
+}

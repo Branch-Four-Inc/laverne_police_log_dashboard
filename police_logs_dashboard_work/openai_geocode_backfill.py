@@ -14,16 +14,20 @@ Run:
     OPENAI_API_KEY="sk-..." python3 openai_geocode_backfill.py
 """
 
+import argparse
 import os
 import re
+import sys
 import time
 import json
 from pathlib import Path
 
 import pandas as pd
-from openai import OpenAI
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+from utils import get_logger
+
+LOGGER = get_logger()
+client = None  # built lazily in main() so importing this file never needs the API key
 MODEL = "gpt-4.1-mini"
 
 HERE = Path(__file__).resolve().parent
@@ -98,21 +102,78 @@ def geocode_via_openai(raw_address: str):
     return lat, lon, "ok", tokens
 
 
+def _norm_addr(addr: str) -> str:
+    # Same normalization as transform_and_geocode.py -- cache keys are stripped + lowercase
+    return str(addr).strip().lower()
+
+
+def _has_coords(entry) -> bool:
+    return bool(entry) and len(entry) == 2 and entry[0] is not None and entry[1] is not None
+
+
+def normalize_cache(raw_cache: dict) -> dict:
+    """Re-key the cache by normalized address. If two keys collide, keep the one with coordinates."""
+    out = {}
+    for addr, val in raw_cache.items():
+        key = _norm_addr(addr)
+        if key not in out or (_has_coords(val) and not _has_coords(out[key])):
+            out[key] = val
+    return out
+
+
 def main():
-    full_queue = pd.read_csv(QUEUE_CSV)["incident_address"].dropna().tolist()
+    global client, CACHE_PATH, PROGRESS_PATH
+
+    parser = argparse.ArgumentParser(description="Backfill missing geocodes using OpenAI + web search.")
+    parser.add_argument("--queue-csv", default=str(QUEUE_CSV),
+                        help="CSV with an incident_address column (default: openai_geocode_queue.csv).")
+    parser.add_argument("--geocoded-csv", default=None,
+                        help="Build the queue from addresses with null lat/lon in this geocoded CSV "
+                             "(overrides --queue-csv).")
+    parser.add_argument("--cache", default=str(CACHE_PATH), help="Path to geocode_cache.json.")
+    parser.add_argument("--progress", default=str(PROGRESS_PATH), help="Path to the backfill progress JSON.")
+    args = parser.parse_args()
+
+    CACHE_PATH = Path(args.cache)
+    PROGRESS_PATH = Path(args.progress)
+
+    if not os.environ.get("OPENAI_API_KEY"):
+        msg = "OPENAI_API_KEY is not set; cannot run the OpenAI backfill."
+        LOGGER.error(msg)
+        sys.exit(msg)
+    from openai import OpenAI
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+    if args.geocoded_csv:
+        geo = pd.read_csv(args.geocoded_csv)
+        missing = geo[geo["lat"].isna() | geo["lon"].isna()]
+        full_queue = missing["incident_address"].dropna().drop_duplicates().tolist()
+    else:
+        full_queue = pd.read_csv(args.queue_csv)["incident_address"].dropna().tolist()
 
     cache = {}
     if CACHE_PATH.exists():
         with open(CACHE_PATH) as f:
-            cache = json.load(f)
+            cache = normalize_cache(json.load(f))
+
+    # Use coordinates already saved in the cache first -- only call OpenAI for addresses
+    # with no usable cached lat/lon. Cache keys are normalized (stripped, lowercase).
+    already_cached = [a for a in full_queue if _has_coords(cache.get(_norm_addr(a)))]
+    full_queue = [a for a in full_queue if not _has_coords(cache.get(_norm_addr(a)))]
+    print(f"{len(already_cached)} addresses already have cached coordinates; skipping those")
+    LOGGER.info("OpenAI backfill: %d addresses satisfied from cache, %d need lookup",
+                len(already_cached), len(full_queue))
 
     progress = {}
     if PROGRESS_PATH.exists():
         with open(PROGRESS_PATH) as f:
             progress = json.load(f)
 
-    queue = [a for a in full_queue if a not in progress]
+    # Progress keys were saved in whatever case the address had at the time; compare normalized
+    attempted = {_norm_addr(a) for a in progress}
+    queue = [a for a in full_queue if _norm_addr(a) not in attempted]
     print(f"Queue: {len(full_queue)} total, {len(progress)} already attempted, {len(queue)} remaining")
+    LOGGER.info("OpenAI backfill queue: %d total, %d remaining", len(full_queue), len(queue))
 
     resolved = out_of_range = unparseable = 0
     total_tokens = 0
@@ -124,7 +185,7 @@ def main():
             total_tokens += tokens
             consecutive_errors = 0
 
-            cache[addr] = [lat, lon]
+            cache[_norm_addr(addr)] = [lat, lon]
             progress[addr] = status
             if status == "ok":
                 resolved += 1
@@ -155,6 +216,8 @@ def main():
         time.sleep(0.5)
 
     print(f"\nDone this run. resolved={resolved} out_of_range={out_of_range} unparseable={unparseable} total_tokens={total_tokens:,}")
+    LOGGER.info("OpenAI backfill done: resolved=%d out_of_range=%d unparseable=%d total_tokens=%d",
+                resolved, out_of_range, unparseable, total_tokens)
     print(f"Cache saved: {CACHE_PATH}")
     print(f"Progress saved: {PROGRESS_PATH} ({len(progress)}/{len(full_queue)} of full queue attempted)")
     print("Check platform.openai.com/usage for the actual dollar amount billed for this run.")

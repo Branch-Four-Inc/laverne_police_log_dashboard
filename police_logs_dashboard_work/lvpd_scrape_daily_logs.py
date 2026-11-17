@@ -208,8 +208,6 @@ def fetch_daily_log_pdf_index(
     Returns DF of all available PDF records and list of bad PDFs that can't be processed
     
     EDIT DATES IN THIS FUNCTION TO FILTER FOR CERTAIN MONTHS
-    
-    CHECK INDEX WHEN BAD_DOC IS DROPPED 
     """
     
     set_request_delay(session, sleep_seconds)
@@ -244,7 +242,8 @@ def fetch_daily_log_pdf_index(
             break
 
         required_fields = {"title", "download_url"}
-        
+        good_docs = []
+
         for index, doc in enumerate(docs, start=1):
             missing_fields = required_fields - set(doc)
             title = doc.get("title")
@@ -276,12 +275,13 @@ def fetch_daily_log_pdf_index(
             
             # create list of all PDFs that can't be processed    
             if issues > 0:
-                bad_docs.append(doc) 
-                docs = docs.drop(index-1)  # remove the bad document from the list
+                bad_docs.append(doc)
+            else:
+                good_docs.append(doc)
 
-        all_docs.extend(docs)
+        all_docs.extend(good_docs)
         total_pages = int(response.headers.get("X-WP-TotalPages", 1))
-        print(f"Fetched PDF index page {page}/{total_pages}: {len(docs)} docs")
+        print(f"Fetched PDF index page {page}/{total_pages}: {len(good_docs)} docs")
 
         if page >= total_pages:
             break
@@ -300,9 +300,19 @@ def fetch_daily_log_pdf_index(
         }
         for doc in all_docs
     ])
+    
+    # use only logs for 2026. Filter on the date in the title (e.g. "03.14.2026" or "08.18.26"),
+    # not the posted date -- the 12.29-12.31.2025 logs were posted in January 2026 and slipped through.
+    pdf_df['date_posted'] = pd.to_datetime(pdf_df['date_posted'])
+    if not pdf_df.empty:
+        title_dates = pd.to_datetime(pdf_df['title'].str.extract(r'(\d{1,2}\.\d{1,2}\.\d{2,4})')[0],
+                                     format='mixed', errors='coerce')
+        # title dates are month.day.year, which pandas reads fine with dots; fall back to posted date if unparseable
+        log_year = title_dates.dt.year.fillna(pdf_df['date_posted'].dt.year)
+        pdf_df = pdf_df[log_year == 2026]
 
     if pdf_df.empty:
-        return pd.DataFrame(columns=["title", "pdf_url", "filename", "file_size", "date_posted", "page_url"])
+        return pd.DataFrame(columns=["title", "pdf_url", "filename", "file_size", "date_posted", "page_url"]), bad_docs
 
     return pdf_df.sort_values("title").reset_index(drop=True), bad_docs
 
@@ -339,9 +349,9 @@ def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
                             col_texts[col_names[idx]] += char["text"]
                             break
 
-                col_texts = {key: value.strip() for key, value in col_texts.items()}
+                col_texts = {key: value.strip().lower() for key, value in col_texts.items()}
 
-                if col_texts["incident"] == "INCIDENT":
+                if col_texts["incident"] == "incident":
                     populated_columns = sum(bool(value) for value in col_texts.values())
                     if populated_columns < len(col_names):
                         structural_error(
@@ -355,8 +365,10 @@ def parse_daily_log(pdf_bytes: bytes) -> list[dict]:
                 if col_texts["incident"].isdigit():
                     rows.append(col_texts)
 
+    # setting this to warning, in early logs, the table header is an image and can't be extracted normally  
     if not table_header_found:
-        structural_error("daily-log PDF did not contain the expected four-column table header")
+        structural_error("daily-log PDF did not contain the expected four-column table header", 
+                         False)
 
     return rows
 
