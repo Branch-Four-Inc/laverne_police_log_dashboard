@@ -22,3 +22,6 @@ secrets.toml
 
 # Pipeline runtime log
 police_logs_dashboard_work/output/scraper.log
+
+# Scraper download archives (large, regenerated on every run)
+*.zip
