@@ -183,6 +183,15 @@ To update the data later, replace the two CSVs and push. The app redeploys autom
 
 No secrets are needed to host the dashboard. The OpenAI key is used only when running the pipeline locally, and `.env` and `secrets.toml` are git-ignored.
 
+### Keep-alive workflow
+
+Streamlit Community Cloud puts the app to sleep after 12 hours without a viewer. The GitHub Action in `.github/workflows/keep-streamlit-awake.yml` visits the app every 4 hours with a headless browser (`scripts/keep_alive.py`, using Playwright), and clicks the wake-up button if the app is already asleep. A plain HTTP request wouldn't count as a visit.
+
+- Run it by hand from the repository's **Actions** tab (**Run workflow**) to test it. A run fails if the app doesn't load, and GitHub emails you.
+- Scheduled workflows only run from the default branch (`main`).
+- GitHub disables scheduled workflows after 60 days with no repository activity. If that happens, re-enable the workflow in the Actions tab.
+- To point it at a different URL, set the repository variable `STREAMLIT_APP_URL`. Otherwise it uses the live app URL in `scripts/keep_alive.py`.
+
 ---
 
 ## How the dashboard works
