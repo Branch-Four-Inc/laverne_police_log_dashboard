@@ -139,6 +139,8 @@ selected = st.sidebar.multiselect(
 if not selected:
     st.sidebar.caption("No incident types selected, so no incidents are shown.")
 
+st.sidebar.markdown("---")
+st.sidebar.caption("Created by Branch Four Inc.")
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
 start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
