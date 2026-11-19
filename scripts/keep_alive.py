@@ -28,7 +28,7 @@ DEFAULT_URL = "https://lavernepolicelogdashboard.streamlit.app/"
 WAKE_BUTTON_TEXT = "get this app back up"   # "Yes, get this app back up!"
 APP_READY_TEXT = "Disclaimer"               # heading at the bottom of app.py, so the whole script ran
 LOAD_TIMEOUT_MS = 120_000                   # a cold start can take a minute or two
-STAY_CONNECTED_MS = 10_000
+STAY_CONNECTED_MS = 30_000                  # stay on the app this long once it has loaded, then exit
 ATTEMPTS = 3
 
 
@@ -76,8 +76,9 @@ def visit(url: str) -> bool:
                         log("No wake-up button; app is already awake (or still loading).")
 
                     if app_loaded(page):
-                        log("App loaded.")
-                        page.wait_for_timeout(STAY_CONNECTED_MS)  # keep the websocket session open briefly
+                        log(f"App loaded. Staying connected for {STAY_CONNECTED_MS // 1000}s.")
+                        page.wait_for_timeout(STAY_CONNECTED_MS)  # keep the websocket session open
+                        log("Done; closing the browser.")
                         return True
                     log(f"App did not finish loading within {LOAD_TIMEOUT_MS // 1000}s.")
                 except PlaywrightTimeout:
