@@ -2,7 +2,7 @@
 
 A Streamlit dashboard of incidents reported to the La Verne Police Department (LVPD).
 
-- Live app: https://lavernepolicelogdashboard-qnxjkmecozminidibjlmto.streamlit.app/
+- Live app: https://lavernepolicelogdashboard.streamlit.app/
 - Raw daily logs (PDFs) from LVPD: https://lvpd.org/news-statistics
 
 ## Repository layout
