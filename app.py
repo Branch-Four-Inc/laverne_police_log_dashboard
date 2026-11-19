@@ -369,14 +369,19 @@ with st.expander("View Data Dictionary"):
 
 # --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
 #with st.expander("About this data", expanded=True):
-st.markdown("### Important")
+st.markdown("#### Disclaimer")
 st.markdown('''
-* **This dashboard is NOT for reporting emergencies or crimes. For an emergency, call 911.** 
-* This dashboard shows reported incidents and is intended for informational purposes only.
-* This dashboard may contain mistakes. Please report mistakes to: newstips@lavernedaily.org
-* Reported incidents do not necessarily mean that a crime occurred or that anyone was arrested or found responsible.
-* Incident information may be updated or corrected over time.
-* Some incident information may be missing due to data processing issues. 
-* Data are sourced from the La Verne Police Department at https://lvpd.org/news-statistics.
-        ''')
+**This dashboard is NOT for reporting emergencies or crimes. For an emergency, call 911.**
+''')
+st.caption('''
+This dashboard is for informational purposes only and is not affiliated with the La Verne Police Department or the City of La Verne.
+Data come from the department's public logs (https://lvpd.org/news-statistics) and were automatically processed and mapped, so locations are approximate
+and information may be missing, incorrect, or updated over time. Reported incidents do not mean a crime occurred or that anyone was arrested or found responsible.
+THE INFORMATION IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING ANY WARRANTY OF ACCURACY, COMPLETENESS, TIMELINESS, OR FITNESS FOR A PARTICULAR PURPOSE.
+Do not rely on it for legal, safety, security, employment, housing, or other decisions; you use it at your own risk and are responsible for verifying anything important with official sources.
+Inclusion of an incident or address does not imply that any person or property is connected to wrongdoing.
+TO THE FULLEST EXTENT PERMITTED BY LAW, LA VERNE DAILY NEWS, BRANCH FOUR INC., AND THEIR OFFICERS, EMPLOYEES, AND CONTRIBUTORS ARE NOT LIABLE FOR ANY CLAIM, LOSS, OR DAMAGE
+(INCLUDING INDIRECT OR CONSEQUENTIAL DAMAGES) ARISING FROM THE USE OF, OR INABILITY TO USE, THIS DASHBOARD OR ITS DATA.
+Please report mistakes to newstips@lavernedaily.org.
+''')
             
