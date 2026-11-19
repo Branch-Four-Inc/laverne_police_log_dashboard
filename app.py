@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
 
-st.set_page_config(page_title="Police Incidents", layout="wide")
+st.set_page_config(page_title="La Verne Police Log Dashboard", layout="wide")
 
 DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 # 33 incident types, so a single plotly palette (Safe has 11) would repeat colors.
@@ -149,7 +149,7 @@ fdf = df[df["log_day"].between(start_ts, end_ts) & df["grouped_nature"].isin(sel
 if address_query:
     fdf = fdf[fdf["address_lc"].str.contains(address_query.strip().lower(), regex=False)]
 
-st.title("La Verne Police Incidents")
+st.title("La Verne Police Log Dashboard")
 st.caption("Explore incidents reported to the La Verne Police Department. Use the filters in the sidebar to narrow what you see.")
 
 # ── Incidents summary ─────────────────────────────────────────────────────────
