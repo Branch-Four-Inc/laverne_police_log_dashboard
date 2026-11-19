@@ -35,7 +35,9 @@ def legend_html(names):
     return f'<div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:0.75rem;">{items}</div>'
 
 
-@st.cache_data(ttl=3600)
+# cache_resource (not cache_data) returns the same DataFrame each rerun instead of a fresh copy.
+# Safe because the app only slices `df`, never mutates it.
+@st.cache_resource(ttl=3600)
 def load():
     try:
         df = pd.read_csv("police_logs_dashboard_work/output/daily_logs_geocoded.csv")
@@ -51,7 +53,7 @@ def load():
     color_map = {n: _to_rgb(CATEGORY_COLORS[i % len(CATEGORY_COLORS)]) for i, n in enumerate(natures)}
 
     # Precompute per-row values once here (this function is cached) instead of on every rerun
-    df["log_day"] = df["log_date"].dt.date
+    df["log_day"] = df["log_date"].dt.normalize()  # datetime64 so date filters are vectorized
     df["color"] = df["grouped_nature"].map(color_map)
     df["address_lc"] = df["incident_address"].fillna("").str.lower()
     df["is_assist"] = df["nature"].str.strip().str.lower() == "assist agency"
@@ -108,13 +110,14 @@ st.sidebar.markdown(
 )
 
 st.sidebar.header("Filters")
-st.sidebar.caption("Use the filters below to narrow the incidents you want to see. You can filter by Date, Incident Type, or Street Address.")
+st.sidebar.caption("Use the filters below to narrow the incidents you want to see. You can filter by Date, Street Address or Incident Type.")
 
 # Widget labels render smaller than markdown text, so use a markdown label (same as "Incident Type")
 # and hide the built-in one.
 st.sidebar.markdown("**Date Range**")
 date_range = st.sidebar.date_input(
-    "Date Range", min_value=min_date, max_value=max_date, key="f_dates", label_visibility="collapsed"
+    "Date Range", min_value=min_date, max_value=max_date, key="f_dates", format="MM/DD/YYYY",
+    label_visibility="collapsed"
 )
 
 st.sidebar.markdown("**Street Address Contains**")
@@ -124,8 +127,8 @@ address_query = st.sidebar.text_input(
 
 st.sidebar.markdown("**Incident Type**")
 btn_all, btn_none = st.sidebar.columns(2)
-btn_all.button("Select all", on_click=_select_all_types, use_container_width=True)
 btn_none.button("Clear all", on_click=_clear_all_types, use_container_width=True)
+btn_all.button("Select all", on_click=_select_all_types, use_container_width=True)
 selected = st.sidebar.multiselect(
     "Incident Type",
     natures,
@@ -138,7 +141,8 @@ if not selected:
 
 
 start, end = date_range if len(date_range) == 2 else (min_date, max_date)
-fdf = df[df["log_day"].between(start, end) & df["grouped_nature"].isin(selected)]
+start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
+fdf = df[df["log_day"].between(start_ts, end_ts) & df["grouped_nature"].isin(selected)]
 
 
 # Simple substring match so partial street names work (e.g. "foothill" matches "2269 FOOTHILL BLVD")
@@ -148,46 +152,37 @@ if address_query:
 st.title("La Verne Police Incidents")
 st.caption("Explore incidents reported to the La Verne Police Department. Use the filters in the sidebar to narrow what you see.")
 
-# ── All-incidents summary ─────────────────────────────────────────────────────
-# Built from the full dataset (`df`), never `fdf`, so it does not change with the sidebar filters.
+# ── Incidents summary ─────────────────────────────────────────────────────────
+# Built from the filtered dataset (`fdf`), so it updates with the sidebar filters.
 with st.container(border=True):
-    st.subheader("All Incidents Summary")
-    st.caption("Covers all dates and incident types. This section is not affected by the filters.")
+    head_col, reset_col = st.columns([5, 1], vertical_alignment="center")
+    head_col.subheader("Summary")
+    #head_col.caption("Reflects the current filters.")
+    reset_col.button("Reset all filters", on_click=_reset_all_filters, use_container_width=True)
 
-    n_days = df["log_day"].nunique()
-    busiest_dow = df["dow"].value_counts().idxmax()
-    busiest_hour = HOUR_LABELS[int(df["hour"].value_counts().idxmax())]
-    sum_cols = st.columns(4)
-    sum_cols[0].metric("Total Incidents", f"{len(df):,}")
-    sum_cols[1].metric("Dates Covered", f"{df['log_day'].min():%b %d, %Y} – {df['log_day'].max():%b %d, %Y}")
-    sum_cols[2].metric("Average per Day", f"{len(df) / n_days:,.1f}")
-    sum_cols[3].metric("Busiest Day & Hour", f"{busiest_dow}, {busiest_hour}")
+    sum_cols = st.columns(3)
+    sum_cols[0].metric(f"Filtered Incidents from {len(df):,} Total", f"{len(fdf):,}")
+    if len(fdf):
+        n_days = fdf["log_day"].nunique()
+        busiest_dow = fdf["dow"].value_counts().idxmax()
+        busiest_hour = HOUR_LABELS[int(fdf["hour"].value_counts().idxmax())]
+        sum_cols[1].metric("Average per Day", f"{len(fdf) / n_days:,.1f}")
+        sum_cols[2].metric("Busiest Day & Hour", f"{busiest_dow}, {busiest_hour}")
 
-
-    top5 = df["grouped_nature"].value_counts().head(5)
-    top5_items = " &nbsp;·&nbsp; ".join(f"<b>{n}</b> ({c:,})" for n, c in top5.items())
-    st.markdown(f"**Top 5 incident types:** {top5_items}", unsafe_allow_html=True)
-
-# ── Filtered results ──────────────────────────────────────────────────────────
-st.subheader("Filtered Results")
-n_types = len(selected)
-type_text = "all incident types" if n_types == len(natures) else f"{n_types} of {len(natures)} incident types"
-filter_bits = [f"{start:%b %d, %Y} – {end:%b %d, %Y}", type_text]
-if address_query.strip():
-    filter_bits.append(f"address contains “{address_query.strip()}”")
-cap_col, reset_col = st.columns([5, 1], vertical_alignment="center")
-cap_col.caption(f"Showing **{len(fdf):,}** of {len(df):,} incidents  ·  " + "  ·  ".join(filter_bits))
-reset_col.button("Reset all filters", on_click=_reset_all_filters, use_container_width=True)
-count_col1, count_col2 = st.columns(2)
-share = f"{len(fdf) / len(df):.1%} of all incidents" if len(df) else None
-count_col1.metric("Filtered Incidents", f"{len(fdf):,}", share, delta_color="off")
-if len(fdf):
-    top_counts = fdf["grouped_nature"].value_counts()
-    count_col2.metric("Most Common Incident Type", str(top_counts.index[0]), f"{top_counts.iloc[0]:,} incidents",
-                      delta_color="off")
-else:
-    count_col2.metric("Most Common Incident Type", "—")
-#st.caption("This dashboard shows all incidents reported to the La Verne Police Department in the selected filters. Data are sourced from the La Verne Police Department.")
+        top3 = fdf["grouped_nature"].value_counts().head(3)
+        st.markdown("**Top 3 Incident Types**")
+        top_cols = st.columns(3)
+        for i, (name, cnt) in enumerate(top3.items()):
+            with top_cols[i]:
+                with st.container(border=True):
+                    #st.caption(f"#{i + 1}")
+                    st.markdown(f"**{i + 1}. {name}**")
+                    st.caption(f"{cnt:,} incidents · {cnt / len(fdf):.1%} of filtered")
+    else:
+        sum_cols[1].metric("Average per Day", "—")
+        sum_cols[2].metric("Busiest Day & Hour", "—")
+        st.markdown("**Top 3 Incident Types**")
+        st.caption("—")
 
 # With no matching incidents every chart would be empty, so show one message instead
 has_rows = len(fdf) > 0
@@ -223,60 +218,64 @@ else:
                 map_style="light",
             )
         )
+        st.caption(f"Note: Only incidents with full addresses are mapped. {len(fdf) - len(map_df):,} incidents are missing full addresses and are not mapped.")
     else:
         st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
-    
-    
-    st.caption(f"Note: Only incidents with full addresses are mapped. {fdf[fdf['lat'].isna()].shape[0]} incidents are missing full addresses and are not mapped.")
 
 
     # ── Daily chart ────────────────────────────────────────────────────────────────
-    st.subheader("Total Incidents by Day")
-    st.caption('''The light grey line shows the total number of reported incidents by date. 
-               The dark blue line shows the 7-day average of the number of incidents. Click the 
-               'Incident Type Breakdown' to view the incident types by date.
-               ''')
-    breakdown = st.toggle("Incident Type breakdown")
-    if breakdown:
-        daily = fdf.groupby(["log_date", "grouped_nature"], observed=True).size().reset_index(name="count")
-        fig = px.bar(
-            daily,
-            x="log_date",
-            y="count",
-            color="grouped_nature",
-            # same color per incident type as the map
-            color_discrete_map={n: CATEGORY_COLORS[i % len(CATEGORY_COLORS)] for i, n in enumerate(natures)},
-            category_orders={"grouped_nature": natures},
-            labels={"log_date": "Date", "count": "Incidents", "grouped_nature": "Incident Type"},
-        )
-    else:
-        daily = fdf.groupby("log_date").size().reset_index(name="count")
-        daily["rolling_7"] = daily["count"].rolling(7, min_periods=1).mean()
-        fig = px.line(daily, x="log_date", y="count", labels={"log_date": "Date", "count": "Incidents"})
-        fig.update_traces(line=dict(color="#c8d8e8", width=1), name="Daily")
-        fig.add_scatter(x=daily["log_date"], y=daily["rolling_7"], name="7-day avg", line=dict(color="#1a4a8a", width=2.5))
+    # A fragment, so toggling the breakdown reruns only this chart, not the whole page.
+    # `fdf` is passed in as an argument so the fragment keeps its own copy of the filtered data.
+    @st.fragment
+    def daily_chart(fdf):
+        st.subheader("Total Incidents by Day")
+        st.caption('''The light grey line shows the total number of reported incidents by date. 
+                   The dark blue line shows the 7-day average of the number of incidents. Click the 
+                   'Incident Type Breakdown' to view the incident types by date.
+                   ''')
+        breakdown = st.toggle("Incident Type breakdown")
+        if breakdown:
+            daily = fdf.groupby(["log_date", "grouped_nature"], observed=True).size().reset_index(name="count")
+            fig = px.bar(
+                daily,
+                x="log_date",
+                y="count",
+                color="grouped_nature",
+                # same color per incident type as the map
+                color_discrete_map={n: CATEGORY_COLORS[i % len(CATEGORY_COLORS)] for i, n in enumerate(natures)},
+                category_orders={"grouped_nature": natures},
+                labels={"log_date": "Date", "count": "Incidents", "grouped_nature": "Incident Type"},
+            )
+        else:
+            daily = fdf.groupby("log_date").size().reset_index(name="count")
+            daily["rolling_7"] = daily["count"].rolling(7, min_periods=1).mean()
+            fig = px.line(daily, x="log_date", y="count", labels={"log_date": "Date", "count": "Incidents"})
+            fig.update_traces(line=dict(color="#c8d8e8", width=1), name="Daily")
+            fig.add_scatter(x=daily["log_date"], y=daily["rolling_7"], name="7-day avg", line=dict(color="#1a4a8a", width=2.5))
 
-    fig.update_layout(height=350, margin=dict(t=10, b=10))
-    if not breakdown:
-        # one tooltip with both the daily count and the 7-day average. (Not used for the breakdown:
-        # with 30+ stacked types a unified tooltip would be far too long.)
-        fig.update_layout(hovermode="x unified")
-    if breakdown:
-        # Plotly can't lay a legend out in columns and scrolls (or stretches the chart) with 30+
-        # entries, so hide it and show the compact wrapping legend above the chart instead.
-        fig.update_layout(showlegend=False)
-        st.markdown(legend_html([n for n in natures if n in set(daily["grouped_nature"])]), unsafe_allow_html=True)
-    # Tick labels adapt to the zoom level: days when the range is short, months when it's long.
-    # (dtickrange is the tick spacing in milliseconds; "M1" etc. are month steps.)
-    fig.update_xaxes(
-        tickformatstops=[
-            dict(dtickrange=[None, 7 * 86400000], value="%B %d, %Y"),   # up to ~weekly ticks
-            dict(dtickrange=[7 * 86400000, "M1"], value="%B %d"),       # weekly to monthly ticks
-            dict(dtickrange=["M1", None], value="%B %Y"),               # monthly or wider
-        ],
-        hoverformat="%A, %B %d, %Y",  # hovering always shows the full date, e.g. "Monday, April 06, 2026"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(height=350, margin=dict(t=10, b=10))
+        if not breakdown:
+            # one tooltip with both the daily count and the 7-day average. (Not used for the breakdown:
+            # with 30+ stacked types a unified tooltip would be far too long.)
+            fig.update_layout(hovermode="x unified")
+        if breakdown:
+            # Plotly can't lay a legend out in columns and scrolls (or stretches the chart) with 30+
+            # entries, so hide it and show the compact wrapping legend above the chart instead.
+            fig.update_layout(showlegend=False)
+            st.markdown(legend_html([n for n in natures if n in set(daily["grouped_nature"])]), unsafe_allow_html=True)
+        # Tick labels adapt to the zoom level: days when the range is short, months when it's long.
+        # (dtickrange is the tick spacing in milliseconds; "M1" etc. are month steps.)
+        fig.update_xaxes(
+            tickformatstops=[
+                dict(dtickrange=[None, 7 * 86400000], value="%B %d, %Y"),   # up to ~weekly ticks
+                dict(dtickrange=[7 * 86400000, "M1"], value="%B %d"),       # weekly to monthly ticks
+                dict(dtickrange=["M1", None], value="%B %Y"),               # monthly or wider
+            ],
+            hoverformat="%A, %B %d, %Y",  # hovering always shows the full date, e.g. "Monday, April 06, 2026"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    daily_chart(fdf)
 
     # ── Heatmap ────────────────────────────────────────────────────────────────────
     st.subheader("Total Incidents by Day of Week & Hour")
@@ -293,7 +292,7 @@ else:
         y="dow",
         z="count",
         color_continuous_scale="Blues",
-        text_auto=True,  # print the count in each cell
+        text_auto=False,  # print the count in each cell
         category_orders={"hour_label": HOUR_LABELS, "dow": DOW_ORDER},
         labels={"hour_label": "Hour of Day", "dow": "", "count": "Incidents"},
     )
@@ -304,27 +303,16 @@ else:
 
     # ── Table ────────────────────────────────────────────────────────────────
     st.subheader("Search Incidents")
-    st.caption("The table lists all reported incidents.")
+    st.caption("The table lists the filtered incidents.")
 
-    fdf = fdf[['reported', 'grouped_nature', 'nature_description', 'incident_address']].rename({'reported': 'Report Date', 
+    table_df = fdf[['reported', 'grouped_nature', 'nature_description', 'incident_address']].rename({'reported': 'Report Date', 
                       'grouped_nature': 'Incident Type', 
                       'nature_description': 'Description', 
                       'incident_address': 'Address'}, axis = 1)
 
-    # # Add a search bar
-    # search_query = st.text_input("Search the dataframe:")
 
-    # # Filter the dataframe based on the search query
-    # if search_query:
-    #     filtered_df = fdf[
-    #         fdf['Incident Type'].str.contains(search_query, case=False, na=False) |
-    #         fdf['Description'].str.contains(search_query, case=False, na=False) |
-    #         fdf['Address'].str.contains(search_query, case=False, na=False)
-    #     ]
-    # else:
-    #     filtered_df = fdf
 
-    table_df = fdf[['Report Date', 'Incident Type', 'Description', 'Address']].reset_index(drop = True)
+    table_df = table_df[['Report Date', 'Incident Type', 'Description', 'Address']].reset_index(drop = True)
 
     st.dataframe(
         table_df,
@@ -343,7 +331,7 @@ else:
 #st.subheader("Assist Agency Calls")
 
 
-assist = df[df["is_assist"] & df["log_day"].between(start, end)]
+assist = df[df["is_assist"] & df["log_day"].between(start_ts, end_ts)]
 
 if address_query:
     assist = assist[assist["address_lc"].str.contains(address_query.strip().lower(), regex=False)]
