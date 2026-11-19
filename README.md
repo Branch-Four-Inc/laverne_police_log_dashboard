@@ -52,6 +52,7 @@ Common options:
 | `python run_pipeline.py` | Full run: scrape → validate/transform → geocode → backfill if needed |
 | `python run_pipeline.py --skip-geocode` | Stop after the transform (quick check; only writes `daily_logs.csv`) |
 | `python run_pipeline.py --no-backfill` | Skip the OpenAI backfill (no API key, or avoid charges) |
+| `python run_pipeline.py --refresh-osm` | Re-download the OpenStreetMap street data used to place intersections (otherwise reused, and refreshed after 30 days) |
 | `python run_pipeline.py --no-zip` | Don't save the downloaded PDFs as a ZIP (saves ~70 MB of disk) |
 | `python run_pipeline.py --backfill-threshold 0.05 --backfill-min-count 100` | Change when the backfill triggers (defaults: 7% of rows or 50 rows missing coordinates) |
 | `python run_pipeline.py --allow-validation-failures` | Keep going even if validation fails. Check the log first |
@@ -69,7 +70,7 @@ Streamlit Community Cloud redeploys on push (the app also caches data for up to 
 
 ### Keep `geocode_cache.json`
 
-`output/geocode_cache.json` stores every address already geocoded. Don't delete it. It's what lets later runs geocode only new addresses.
+`output/geocode_cache.json` stores every address already geocoded. Don't delete it. It's what lets later runs geocode only new addresses. (`output/osm_streets.json` is a separate download that's safe to delete. It will be fetched again.)
 
 ### OpenAI API key (optional)
 
@@ -116,7 +117,29 @@ Runs in this order:
    - Converts timestamps and drops rows that can't be parsed.
    - Cuts off at the end of the previous month, so a partial current month never appears.
    - Adds `nature_description` and `grouped_nature` from `nature_descriptions.xlsx`. Unknown codes fall back to "Other". Writes `output/daily_logs.csv`.
-3. **Geocode** each unique address with the US Census geocoder. For intersections like `A & B`, it geocodes each street and averages the coordinates. Results are cached in `output/geocode_cache.json`. Writes `output/daily_logs_geocoded.csv` with `lat` and `lon`.
+3. **Geocode** each unique address. Writes `output/daily_logs_geocoded.csv` with `lat` and `lon`. Results are cached in `output/geocode_cache.json`.
+   - **Street addresses** (`123 FOOTHILL BLVD`) go to the US Census geocoder. Only addresses not already in the cache are looked up.
+   - **Intersections** (`A & B`, `A / B`) use OpenStreetMap (OSM) data instead, because the Census geocoder can't place them. See [Intersection geocoding](#intersection-geocoding-openstreetmap) below.
+
+#### Intersection geocoding (OpenStreetMap)
+
+Averaging the coordinates of two separately geocoded streets puts the pin at an arbitrary point along a long street. Instead, the pipeline finds the point where the two streets actually cross in OSM:
+
+1. **One bulk download.** The first run asks the Overpass API for every named, drivable street in a box around La Verne (footways, paths, and similar are skipped). It keeps only the nodes where two differently named streets meet, and saves them to `output/osm_streets.json`.
+2. **Local lookups.** Each intersection is then matched against that file with no network calls. The file is re-downloaded when it's older than 30 days, or when you pass `--refresh-osm` to `transform_and_geocode.py`. If a refresh fails, the older copy is used. If there is no copy at all, intersections are left unmapped for that run.
+3. **Street names are standardized** to OSM's spelling before matching:
+   - Abbreviated types are spelled out (`FOOTHILL BLVD` → Foothill Boulevard).
+   - A leading `N/S/E/W` is dropped, and anything after a comma is ignored.
+   - Spelled-out numbered streets (`EIGHTH ST`) also match OSM's digit form (`8th Street`).
+   - Truncated or bare names are mapped by hand (`FOOTHILL`, `ARROW`, `BASELINE`, and others in `STREET_ALIASES`).
+   - The freeways are named in OSM, not numbered. `IS210` becomes Foothill Freeway, and it also tries `Interstate 210` and `I-210`. `IS10` becomes San Bernardino Freeway, and it also tries `Interstate 10` and `I-10`.
+4. **Picking the point.** If the streets cross in several places, it takes the crossing nearest the center of La Verne and averages any within about 150 m of it, which covers the two sides of a divided road.
+
+There is deliberately no fallback to geocoding one of the streets. An intersection that can't be placed stays unmapped (the dashboard reports how many), because a wrong pin is worse than none.
+
+Intersections are re-resolved on every run, since it's a quick local lookup, and this replaces any older averaged coordinates in the cache. The ones that couldn't be placed are written to `output/unmatched_intersections.csv`, with the row count and the reason for each (street not found in OSM, no shared intersection, or couldn't be split into two streets). To fix one, add its spelling to `STREET_ALIASES` in `transform_and_geocode.py`.
+
+To force a re-download, run `python run_pipeline.py --refresh-osm` (or pass `--refresh-osm` to `transform_and_geocode.py` directly).
 
 ### Step 3: OpenAI backfill: `openai_geocode_backfill.py`
 

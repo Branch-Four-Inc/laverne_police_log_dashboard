@@ -9,6 +9,7 @@ Usage:
     python transform_and_geocode.py --input raw_scraped.csv
     python transform_and_geocode.py --input raw_scraped.csv --skip-geocode
     python transform_and_geocode.py --input raw_scraped.csv --geocode-cache geocode_cache.json
+    python transform_and_geocode.py --input raw_scraped.csv --refresh-osm   # re-download the street data
     python transform_and_geocode.py --input raw_scraped.csv --allow-validation-failures
 
 Outputs go to the current directory unless you pass --output-dir.
@@ -19,8 +20,11 @@ exits with code 2 and the CSVs and the geocode cache are left exactly as they we
 
 import argparse
 import json
+import math
+import re
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -35,149 +39,6 @@ VALIDATION_FAILED_EXIT_CODE = 2
 LOGGER = get_logger()
 install_exception_logger(LOGGER)
 
-
-# These are the human-readable descriptions for the raw nature codes LVPD uses.
-# Pulled from the nature key we built during the EDA phase — natures_found_in_key.csv.
-# If new codes show up in future scrapes, add them here.
-# NATURE_DESCRIPTIONS = {
-#     "PDOBS": "Police Department Observed Suspicious Circumstances",
-#     "911 INVEST": "911 Investigation",
-#     "SUSP SUBJ": "Suspicious Subjects",
-#     "SUSP VEHICLE": "Suspicious Vehicle",
-#     "SUSP CIRCS": "Suspicious Circumstances",
-#     "TC NON INJURY": "Traffic Collision - Non Injury",
-#     "TC HR NON INJ": "Traffic Collision Hit and Run - Non Injuries",
-#     "470 PC FRAUD": "Fraud Report",
-#     "PPI": "Impounded Vehicle Private Party",
-#     "TRAFFIC STOP": "Traffic Stop",
-#     "WELFARE CHECK": "Welfare Check",
-#     "CITIZEN ASST": "Citizen Assist",
-#     "DISTURB PERSON": "Disturbance - Person",
-#     "DISTURB SUBJS": "Disturbance - Subjects",
-#     "DISTURB NOISE": "Disturbance - Noise",
-#     "DISTURB MUSIC": "Disturbance - Music",
-#     "DISTURB PARTY": "Disturbance - Party",
-#     "DISTURB ROAD": "Disturbance - Road",
-#     "DISTURB UNK": "Disturbance - Unknown",
-#     "DISTURB SHOTS": "Disturbance - Shots",
-#     "DISTURB FIREWKS": "Disturbance - Fireworks",
-#     "459PC BURGLARY": "Burglary",
-#     "459PC VEH/BURG": "Vehicle Burglary",
-#     "BURGLARY IP/JO": "Burglary In Progress / Just Occurred",
-#     "487 PC": "Grand Theft",
-#     "GTARPT": "Grand Theft Auto Report",
-#     "GRAND THEFT VEH": "Grand Theft Vehicle",
-#     "GTA IP/JO": "Grand Theft Auto In Progress / Just Occurred",
-#     "GTA LOCATED": "Stolen Vehicle Located",
-#     "THEFT VEHICLE": "Vehicle Theft",
-#     "PETTY THEFT": "Petty Theft",
-#     "PETTY THEFT RPT": "Petty Theft Report",
-#     "THEFT MAIL": "Mail Theft",
-#     "IDENTITY THEFT": "Identity Theft",
-#     "SHOPLIFTER IC": "Shoplifter In Custody",
-#     "594 PC GRAFFITI": "Vandalism - Graffiti",
-#     "594PC VANDALISM": "Vandalism",
-#     "VANDALISM IP/JO": "Vandalism In Progress / Just Occurred",
-#     "211PC ROBBERY": "Robbery",
-#     "ROBBERY IP/JO": "Robbery In Progress / Just Occurred",
-#     "245PC ADW IP/JO": "Assault with Deadly Weapon In Progress / Just Occurred",
-#     "245PC ADW RPT": "Assault with Deadly Weapon Report",
-#     "BATTERY": "Battery",
-#     "BATTERY IP/JO": "Battery In Progress / Just Occurred",
-#     "FIGHT IP/JO": "Fight In Progress / Just Occurred",
-#     "DUI": "Driving Under the Influence",
-#     "PUBLIC INTOX": "Public Intoxication",
-#     "DRUG ACTIVITY": "Drug Activity",
-#     "TRAFFIC ENFORCE": "Traffic Enforcement",
-#     "TRAFFIC HAZARD": "Traffic Hazard",
-#     "BIKE TRAFFIC": "Bicycle Traffic Stop",
-#     "SPEEDING VEH": "Speeding Vehicle",
-#     "PEDESTRIAN TRAF": "Pedestrian Traffic Stop",
-#     "TC INJURY": "Traffic Collision - Injury",
-#     "TC HIT RUN INJ": "Traffic Collision Hit and Run - Injury",
-#     "TC VEH VS PED": "Traffic Collision - Vehicle vs Pedestrian",
-#     "TC UNK": "Traffic Collision - Unknown",
-#     "ILLEGAL PARKER": "Illegal Parking",
-#     "ABAND VEH": "Abandoned Vehicle",
-#     "VEH TAMPERING": "Vehicle Tampering",
-#     "FOUND PROP": "Found Property",
-#     "LOST PROPERTY": "Lost Property",
-#     "PROP FOR DESTR": "Property for Destruction",
-#     "MISSING ADULT": "Missing Adult",
-#     "MISSING FOUND": "Missing Person Located",
-#     "CODE H SUBJ": "5150 Welfare and Institutions Code Subject",
-#     "ASSIST AGENCY": "Assist Other Agency",
-#     "APS REF": "Adult Protective Services Referral",
-#     "KEEP THE PEACE": "Keep the Peace",
-#     "HAIL BY CITIZEN": "Hailed by Citizen",
-#     "TRESPASS": "Trespassing",
-#     "SOLICITOR": "Solicitor",
-#     "ANIMAL BITE RPT": "Animal Bite Report",
-#     "ANIMAL CRUELTY": "Animal Cruelty",
-#     "ANIMAL INJURED": "Injured Animal",
-#     "ANIMAL VICIOUS": "Vicious Animal",
-#     "BARKING DOG": "Barking Dog",
-#     "HUMANE PROBLEM": "Humane Problem",
-#     "BEAR PROB": "Bear Problem",
-#     "AREA CHECK": "Area Check",
-#     "FOOT PATROL": "Foot Patrol",
-#     "CITE SIGN OFF": "Citation Sign Off",
-#     "LA VERNE MUNI": "La Verne Municipal Code Violation",
-#     "COMM BUILD CHK": "Commercial Building Check",
-#     "653M PC": "Threatening / Annoying Phone Calls",
-#     "INDECENT EXPOS": "Indecent Exposure",
-#     "BRANDISH WEAPON": "Brandishing a Weapon",
-#     "BOMB THREAT": "Bomb Threat",
-#     "PROWLER": "Prowler",
-#     "CRIM THRT RPT": "Criminal Threat Report",
-#     "ILLEGAL BURN": "Illegal Burning",
-#     "SUSP TRANS": "Suspicious Transaction",
-#     "SUSP NOISE": "Suspicious Noise",
-# }
-
-# # Broader category groupings — mirrors scripts/add_grouped_nature.py in the dashboard repo.
-# # Keep these in sync if the dashboard team updates their groupings.
-# GROUPS = {
-#     "Fraud": ["470 PC FRAUD", "537E PC DEFRAUD"],
-#     "Grand Theft": ["487 PC", "GTARPT", "GRAND THEFT VEH", "GTA IP/JO", "GTA LOCATED"],
-#     "Vehicle Theft": ["THEFT VEHICLE"],
-#     "Vandalism": ["594 PC GRAFFITI", "594PC VANDALISM", "VANDALISM IP/JO"],
-#     "Burglary": ["459PC BURGLARY", "BURGLARY IP/JO", "459PC VEH/BURG"],
-#     "Robbery": ["211PC ROBBERY", "ROBBERY IP/JO"],
-#     "Assault w/Deadly Weapon": ["245PC ADW IP/JO", "245PC ADW RPT"],
-#     "Battery": ["BATTERY", "BATTERY IP/JO"],
-#     "Suspicious Circumstances": ["SUSP CIRCS", "PDOBS"],
-#     "Suspicious Subjects": ["SUSP SUBJ"],
-#     "Suspicious Vehicle": ["SUSP VEHICLE"],
-#     "Traffic Collision": ["TC NON INJURY", "TC HR NON INJ", "TC INJURY", "TC HIT RUN INJ", "TC VEH VS PED", "TC UNK"],
-#     "Petty Theft": ["PETTY THEFT", "PETTY THEFT RPT"],
-#     "Theft": ["THEFT MAIL", "IDENTITY THEFT"],
-#     "Disturbance": [
-#         "DISTURB PERSON", "DISTURB SUBJS", "DISTURB NOISE", "DISTURB MUSIC",
-#         "DISTURB PARTY", "DISTURB ROAD", "DISTURB UNK", "DISTURB SHOTS", "DISTURB FIREWKS",
-#     ],
-#     "Threatening Calls": ["653M PC"],
-#     "Fight": ["FIGHT IP/JO"],
-#     "Impound": ["PPI"],
-#     "Traffic Stop": ["TRAFFIC STOP"],
-#     "Traffic Enforcement": ["TRAFFIC ENFORCE", "TRAFFIC HAZARD", "BIKE TRAFFIC", "SPEEDING VEH", "PEDESTRIAN TRAF"],
-#     "Parking": ["ILLEGAL PARKER", "ABAND VEH"],
-#     "Suspicious Activity": ["SUSP TRANS", "SUSP NOISE"],
-#     "Drug/Alcohol": ["DRUG ACTIVITY", "DUI", "PUBLIC INTOX"],
-#     "Animal": ["ANIMAL BITE RPT", "ANIMAL CRUELTY", "ANIMAL INJURED", "ANIMAL VICIOUS", "BARKING DOG", "HUMANE PROBLEM", "BEAR PROB"],
-#     "Property": ["FOUND PROP", "LOST PROPERTY", "PROP FOR DESTR", "VEH TAMPERING"],
-#     "Welfare/Assist": ["WELFARE CHECK", "CITIZEN ASST", "CODE H SUBJ", "ASSIST AGENCY", "APS REF", "KEEP THE PEACE", "HAIL BY CITIZEN"],
-#     "Trespass/Solicitor": ["TRESPASS", "SOLICITOR"],
-#     "Shoplifting": ["SHOPLIFTER IC"],
-#     "Other": [
-#         "911 INVEST", "AREA CHECK", "FOOT PATROL", "CITE SIGN OFF", "LA VERNE MUNI",
-#         "COMM BUILD CHK", "MISSING ADULT", "MISSING FOUND", "INDECENT EXPOS",
-#         "BRANDISH WEAPON", "BOMB THREAT", "PROWLER", "CRIM THRT RPT", "ILLEGAL BURN",
-#     ],
-# }
-
-# # Flatten to a simple nature -> group lookup
-# NATURE_TO_GROUP = {nature: group for group, natures in GROUPS.items() for nature in natures}
 
 # read nature descriptions from file 
 # (located relative to this file, not the current working directory, so it works from any folder;
@@ -266,6 +127,7 @@ def _is_intersection(addr: str) -> bool:
 
 
 def _census_geocode_single(addr: str) -> tuple[float | None, float | None]:
+    time.sleep(0.2)  # be polite to the Census API
     try:
         r = SESSION.get(
             "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress",
@@ -281,36 +143,243 @@ def _census_geocode_single(addr: str) -> tuple[float | None, float | None]:
     return None, None
 
 
-def geocode_address(raw_addr: str) -> tuple[float | None, float | None]:
+# ── Intersections (OpenStreetMap / Overpass) ──────────────────────────────────
+# The Census geocoder can't do "STREET A & STREET B", and geocoding each street separately gives an
+# arbitrary point somewhere along a long street. OpenStreetMap stores streets as ways that share a
+# node wherever they cross, so we ask Overpass for the node shared by the two streets.
+
+# Search area for the Overpass query only (Overpass needs some area to search in). Results are not
+# checked against it afterwards.
+OVERPASS_SEARCH_BBOX = {"south": 34.06, "north": 34.16, "west": -117.83, "east": -117.69}
+LA_VERNE_CENTER = (34.1008, -117.7678)
+
+OVERPASS_URLS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+
+# Police logs abbreviate; OSM spells street types out ("Foothill Boulevard")
+STREET_SUFFIXES = {
+    "BLVD": "Boulevard", "HWY": "Highway", "AVE": "Avenue", "ST": "Street", "DR": "Drive", "RD": "Road",
+    "PKWY": "Parkway", "LN": "Lane", "CT": "Court", "PL": "Place", "CIR": "Circle", "TER": "Terrace",
+    "TRL": "Trail", "FWY": "Freeway", "WAY": "Way", "AV": "Avenue", "WY": "Way",
+}
+# the suffix words themselves, so "E ST" (E Street) isn't mistaken for "East" + a suffix
+SUFFIX_WORDS = set(STREET_SUFFIXES) | {v.upper() for v in STREET_SUFFIXES.values()}
+DIRECTIONS = {"N", "S", "E", "W", "NORTH", "SOUTH", "EAST", "WEST"}
+
+# Whole-name spellings the log uses that don't follow the pattern above. Keys are upper case with
+# punctuation removed; values are the OSM name. Only streets where the match is unambiguous.
+STREET_ALIASES = {
+    # bare or truncated names of the main streets
+    "WHITE": "White Avenue", "ARROW": "Arrow Highway", "WHEELER": "Wheeler Avenue",
+    "FOOTHILL": "Foothill Boulevard", "FOOTHIL": "Foothill Boulevard", "GAREY": "Garey Avenue",
+    "BASELINE": "Baseline Road", "BASELINE AVE": "Baseline Road", "BASE LINE": "Baseline Road",
+    "BONITA": "Bonita Avenue", "DAMIEN": "Damien Avenue", "PUENTE": "Puente Street",
+    "TOWNE CENTER": "Towne Center Drive", "ORANGE GROVE": "Orange Grove Avenue",
+    "SAN DIMAS CYN": "San Dimas Canyon Road", "SAN DIMAS CNYN": "San Dimas Canyon Road",
+    # the 210 and 10 freeways are named, not numbered, in OSM
+    "IS210": "Foothill Freeway", "IS 210": "Foothill Freeway", "IS10": "San Bernardino Freeway",
+    "IS 10": "San Bernardino Freeway",
+}
+
+# The logs spell numbered streets out ("EIGHTH ST"); OSM mostly uses digits ("8th Street"). We use the
+# word form as the canonical name and match either one in OSM.
+ORDINALS = {"first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th", "fifth": "5th", "sixth": "6th",
+            "seventh": "7th", "eighth": "8th", "ninth": "9th", "tenth": "10th", "eleventh": "11th",
+            "twelfth": "12th"}
+ORDINALS_REVERSE = {v: k for k, v in ORDINALS.items()}
+
+def _normalize_street(street: str) -> str | None:
+    """'FOOTHILL BLVD' -> 'Foothill Boulevard'; 'EIGHTH ST' -> 'Eighth Street'; 'IS210' -> 'Foothill Freeway'.
+
+    Drops a leading N/S/E/W (OSM has 'East Bonita Avenue') and anything after a comma ('WHITE AVE, LAV, 91750').
+    """
+    street = street.split(",")[0]
+    words = re.sub(r"[^A-Za-z0-9 '\-]", " ", street).split()
+    if not words:
+        return None
+    if " ".join(words).upper() in STREET_ALIASES:
+        return STREET_ALIASES[" ".join(words).upper()]
+    # Drop a leading direction, unless what's left is only a street type ("E ST" is E Street)
+    if len(words) > 1 and words[0].upper() in DIRECTIONS and not (len(words) == 2 and words[1].upper() in SUFFIX_WORDS):
+        words = words[1:]
+        if " ".join(words).upper() in STREET_ALIASES:
+            return STREET_ALIASES[" ".join(words).upper()]
+    if len(words) > 1 and words[-1].upper() in STREET_SUFFIXES:
+        words[-1] = STREET_SUFFIXES[words[-1].upper()]
+    if words[0].lower() in ORDINALS_REVERSE:  # "4TH AVENUE" -> "Fourth Avenue"
+        words[0] = ORDINALS_REVERSE[words[0].lower()]
+    return " ".join(w.capitalize() if w.isupper() or w.islower() else w for w in words)
+
+
+def _street_variants(name: str) -> list[str]:
+    """Other spellings of the same street that OSM might use."""
+    variants = [name]
+    first, _, rest = name.partition(" ")
+    if first.lower() in ORDINALS:
+        variants.append(f"{ORDINALS[first.lower()]} {rest}".strip())
+    if name == "Baseline Road":
+        variants.append("Base Line Road")
+    # OSM may name the freeways by name or by route number
+    if name == "Foothill Freeway":
+        variants += ["Interstate 210", "I-210"]
+    if name == "San Bernardino Freeway":
+        variants += ["Interstate 10", "I-10"]
+    # Some OSM streets are named without their type ("Cobblestone" for "Cobblestone Lane")
+    for v in list(variants):
+        base, _, last = v.rpartition(" ")
+        if base and last.upper() in SUFFIX_WORDS:
+            variants.append(base)
+    return variants
+
+
+def _split_intersection(addr: str) -> list[str]:
+    return [p.strip() for p in re.split(r"\s*(?:&|/|\band\b)\s*", addr, flags=re.IGNORECASE) if p.strip()]
+
+
+# ── OpenStreetMap street data: one bulk download, then local lookups ──────────
+# Instead of one Overpass request per intersection, download every named street in the search area
+# once (ways and their nodes), keep the nodes where two differently named streets meet, and look
+# intersections up locally. The result is saved to a file and refreshed after OSM_MAX_AGE_DAYS.
+OSM_MAX_AGE_DAYS = 30
+# Streets nobody drives on aren't useful for incident intersections
+OSM_SKIP_HIGHWAYS = "footway|path|cycleway|steps|pedestrian|track|bridleway|corridor|proposed|construction|elevator"
+
+
+def _osm_key(name: str) -> str:
+    """Lower case, without a leading direction: 'East Bonita Avenue' -> 'bonita avenue'."""
+    return re.sub(r"^(north|south|east|west) (?=\S)", "", name.strip().lower())
+
+
+def _download_osm_streets() -> list[dict] | None:
+    b = OVERPASS_SEARCH_BBOX
+    box = f"{b['south']},{b['west']},{b['north']},{b['east']}"
+    query = (
+        "[out:json][timeout:240];"
+        f'way["highway"]["name"]["highway"!~"^({OSM_SKIP_HIGHWAYS})$"]({box});'
+        "out body;>;out skel qt;"
+    )
+    for attempt in range(2):
+        for url in OVERPASS_URLS:
+            try:
+                print(f"Downloading street data from {url} (one request; this can take a minute)...")
+                r = SESSION.post(url, data={"data": query}, timeout=(10, 300))
+                if r.status_code == 200:
+                    return r.json()["elements"]
+                print(f"  [warn] {url} returned HTTP {r.status_code}")
+            except (requests.RequestException, ValueError, KeyError) as exc:
+                print(f"  [warn] {url} failed: {type(exc).__name__}")
+        time.sleep(10 * (attempt + 1))
+    return None
+
+
+def _build_osm_intersections(elements: list[dict]) -> list[list]:
+    """Keep only nodes shared by two or more differently named streets: [[lat, lon, [street keys]], ...]."""
+    xy = {e["id"]: (e["lat"], e["lon"]) for e in elements if e["type"] == "node"}
+    streets_at: dict[int, set] = defaultdict(set)
+    for e in elements:
+        if e["type"] == "way" and e.get("tags", {}).get("name"):
+            key = _osm_key(e["tags"]["name"])
+            for nid in e.get("nodes", []):
+                streets_at[nid].add(key)
+    return [[xy[nid][0], xy[nid][1], sorted(keys)]
+            for nid, keys in streets_at.items() if len(keys) >= 2 and nid in xy]
+
+
+class OsmStreetIndex:
+    def __init__(self, intersections: list[list]):
+        self.intersections = intersections
+        self.nodes_on: dict[str, set[int]] = defaultdict(set)  # street key -> intersection ids
+        for i, (_, _, keys) in enumerate(intersections):
+            for k in keys:
+                self.nodes_on[k].add(i)
+
+    def _ids(self, name: str) -> set[int]:
+        ids: set[int] = set()
+        for v in _street_variants(name):
+            ids |= self.nodes_on.get(v.lower(), set())
+        return ids
+
+    def knows(self, name: str) -> bool:
+        return bool(self._ids(name))
+
+    def find(self, name_a: str, name_b: str) -> list[tuple[float, float]]:
+        return [(self.intersections[i][0], self.intersections[i][1]) for i in self._ids(name_a) & self._ids(name_b)]
+
+
+def load_osm_index(path: Path, refresh: bool = False) -> OsmStreetIndex | None:
+    """Load the saved street data, downloading it first if missing, stale or --refresh-osm. None if unavailable."""
+    fresh = path.exists() and (time.time() - path.stat().st_mtime) < OSM_MAX_AGE_DAYS * 86400
+    if fresh and not refresh:
+        with open(path) as f:
+            data = json.load(f)
+        print(f"Loaded OSM street data: {len(data['intersections']):,} intersections ({path})")
+        return OsmStreetIndex(data["intersections"])
+
+    elements = _download_osm_streets()
+    if elements is None:
+        if path.exists():
+            print(f"[warn] Could not refresh OSM street data; using the older copy at {path}")
+            with open(path) as f:
+                return OsmStreetIndex(json.load(f)["intersections"])
+        print("[warn] Could not download OSM street data. Intersections will not be geocoded this run.")
+        return None
+    intersections = _build_osm_intersections(elements)
+    with open(path, "w") as f:
+        json.dump({"fetched": time.strftime("%Y-%m-%d %H:%M:%S"), "bbox": OVERPASS_SEARCH_BBOX,
+                   "intersections": intersections}, f)
+    print(f"Saved OSM street data: {len(intersections):,} intersections from {len(elements):,} elements -> {path}")
+    return OsmStreetIndex(intersections)
+
+
+def _meters_apart(p: tuple[float, float], q: tuple[float, float]) -> float:
+    dlat = (p[0] - q[0]) * 111_000
+    dlon = (p[1] - q[1]) * 111_000 * math.cos(math.radians(p[0]))
+    return math.hypot(dlat, dlon)
+
+
+def _pick_intersection(nodes: list[tuple[float, float]]) -> tuple[float, float] | None:
+    # A divided road or a long street that meets another in several places gives several nodes.
+    # Take the one nearest La Verne's center, and average any that sit within ~150 m of it
+    # (the two sides of a divided road).
+    if not nodes:
+        return None
+    anchor = min(nodes, key=lambda n: _meters_apart(n, LA_VERNE_CENTER))
+    near = [n for n in nodes if _meters_apart(anchor, n) <= 150]
+    return sum(n[0] for n in near) / len(near), sum(n[1] for n in near) / len(near)
+
+
+# Why each intersection couldn't be placed (address -> reason), for the unmatched report
+UNRESOLVED_INTERSECTIONS: dict[str, str] = {}
+
+
+def geocode_intersection(addr: str, index: OsmStreetIndex) -> tuple[float | None, float | None]:
+    parts = [_normalize_street(p) for p in _split_intersection(addr)]
+    parts = [p for p in parts if p]
+    if len(parts) != 2:
+        UNRESOLVED_INTERSECTIONS[addr] = "could not split into two streets"
+        return None, None
+    missing = [p for p in parts if not index.knows(p)]
+    if missing:
+        UNRESOLVED_INTERSECTIONS[addr] = "street not found in OSM: " + ", ".join(missing)
+        return None, None
+    picked = _pick_intersection(index.find(parts[0], parts[1]))
+    if picked is None:
+        UNRESOLVED_INTERSECTIONS[addr] = "streets exist in OSM but share no intersection"
+        return None, None
+    UNRESOLVED_INTERSECTIONS.pop(addr, None)
+    return picked
+
+
+def geocode_address(raw_addr: str, osm_index: OsmStreetIndex | None) -> tuple[float | None, float | None]:
     addr = raw_addr.split(";")[0].strip()
 
-    if not _is_intersection(addr):
-        return _census_geocode_single(_clean_address(addr))
+    if _is_intersection(addr):
+        # No fallback to geocoding one street: that gives a pin far from the real corner.
+        # Better to leave it unmapped (the dashboard counts unmapped incidents).
+        if osm_index is None:
+            return None, None
+        return geocode_intersection(addr, osm_index)
 
-    # For intersections the Census geocoder doesn't handle "STREET A & STREET B" well,
-    # so we geocode each street individually and average the coords as an approximation.
-    # Not perfectly accurate but puts the pin close enough to the right corner.
-    for sep in [" & ", " / ", "/"]:
-        if sep in addr:
-            parts = addr.split(sep, 1)
-            break
-    else:
-        parts = [addr]
-
-    coords = []
-    for part in parts:
-        part = part.strip()
-        if part:
-            lat, lon = _census_geocode_single(f"{part}, {CITY}")
-            if lat is not None:
-                coords.append((lat, lon))
-        time.sleep(0.2)
-
-    if len(coords) == 2:
-        return (coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2
-    if len(coords) == 1:
-        return coords[0]
-    return None, None
+    return _census_geocode_single(_clean_address(addr))
 
 
 def _norm_addr(addr: str) -> str:
@@ -332,7 +401,7 @@ def normalize_cache(raw_cache: dict) -> dict:
     return out
 
 
-def geocode_dataframe(df: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
+def geocode_dataframe(df: pd.DataFrame, cache_path: Path, osm_streets_path: Path, refresh_osm: bool = False) -> pd.DataFrame:
     # Load whatever we've already geocoded so we don't re-hit the API every run
     cache: dict[str, list] = {}
     if cache_path.exists():
@@ -341,17 +410,26 @@ def geocode_dataframe(df: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
         cache = normalize_cache(raw_cache)
         print(f"Loaded geocode cache: {len(raw_cache)} entries -> {len(cache)} unique addresses")
 
+    osm_index = load_osm_index(osm_streets_path, refresh=refresh_osm)
+
     # One lookup per normalized address; keep the first original spelling for the Census query
     unique_addrs = {}
     for a in df["incident_address"].dropna().unique():
         unique_addrs.setdefault(_norm_addr(a), a)
-    to_geocode = [orig for key, orig in unique_addrs.items() if key not in cache]
-    print(f"Addresses to geocode using CENSUS geocoder: {len(to_geocode)} new / {len(unique_addrs)} total")
+
+    def is_inter(a: str) -> bool:
+        return _is_intersection(a.split(";")[0].strip())
+
+    # Intersections are re-resolved every run: it's a local lookup (no network), and older cache entries for
+    # them are averaged coordinates that can be far off. If the street data couldn't be loaded, leave them as is.
+    to_geocode = [orig for key, orig in unique_addrs.items()
+                  if (is_inter(orig) and osm_index is not None) or (not is_inter(orig) and key not in cache)]
+    print(f"Addresses to geocode (Census for street addresses, OpenStreetMap for intersections): "
+          f"{len(to_geocode)} to look up / {len(unique_addrs)} total")
 
     for i, addr in enumerate(to_geocode, 1):
-        lat, lon = geocode_address(addr)
+        lat, lon = geocode_address(addr, osm_index)
         cache[_norm_addr(addr)] = [lat, lon]
-        time.sleep(0.2)
         if i % 50 == 0:
             print(f"  Geocoded {i}/{len(to_geocode)}...")
             # Write incrementally so we don't lose everything if it gets interrupted
@@ -361,6 +439,17 @@ def geocode_dataframe(df: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
     with open(cache_path, "w") as f:
         json.dump(cache, f)
     print(f"Geocode cache saved: {len(cache)} addresses → {cache_path}")
+
+    if UNRESOLVED_INTERSECTIONS:
+        counts = df["incident_address"].map(_norm_addr).value_counts()
+        report = pd.DataFrame(
+            [(a, int(counts.get(_norm_addr(a), 0)), why) for a, why in UNRESOLVED_INTERSECTIONS.items()],
+            columns=["address", "rows", "reason"],
+        ).sort_values("rows", ascending=False)
+        report_path = cache_path.with_name("unmatched_intersections.csv")
+        report.to_csv(report_path, index=False)
+        print(f"{len(report):,} intersections ({report['rows'].sum():,} rows) could not be placed -> {report_path}")
+        print(report.head(10).to_string(index=False))
 
     df = df.copy()
     df["lat"] = df["incident_address"].map(lambda a: cache.get(_norm_addr(a), [None, None])[0])
@@ -376,6 +465,10 @@ def main() -> None:
     parser.add_argument("--input", required=True, help="Path to raw scraped CSV from lvpd_scrape_daily_logs.py")
     parser.add_argument("--output-dir", default=".", help="Directory to write output CSVs (default: current dir)")
     parser.add_argument("--geocode-cache", default="geocode_cache.json", help="Path to geocoding cache JSON (created if missing)")
+    parser.add_argument("--osm-streets", default=None,
+                        help="Path to the saved OpenStreetMap street data (default: osm_streets.json next to the geocode cache)")
+    parser.add_argument("--refresh-osm", action="store_true",
+                        help=f"Re-download the OpenStreetMap street data (otherwise it is refreshed after {OSM_MAX_AGE_DAYS} days)")
     parser.add_argument("--skip-geocode", action="store_true", help="Skip geocoding and only output daily_logs.csv")
     parser.add_argument("--allow-validation-failures", action="store_true",
                         help="Log validation failures but keep going anyway (for when you've checked the data and know it's fine)")
@@ -415,7 +508,8 @@ def main() -> None:
 
     print(f"\n=== Step 4: Geocode ===")
     cache_path = Path(args.geocode_cache)
-    df_geo = geocode_dataframe(df, cache_path)
+    osm_path = Path(args.osm_streets) if args.osm_streets else cache_path.with_name("osm_streets.json")
+    df_geo = geocode_dataframe(df, cache_path, osm_path, refresh_osm=args.refresh_osm)
 
     geo_path = out_dir / "daily_logs_geocoded.csv"
     df_geo.to_csv(geo_path, index=False)

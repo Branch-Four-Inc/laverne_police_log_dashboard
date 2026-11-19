@@ -1,0 +1,79 @@
+address,rows,reason
+fruit st & is210,44,street not found in OSM: Foothill Freeway
+foothill blvd & is210,28,street not found in OSM: Foothill Freeway
+foothill blvd & canyon view dr,20,streets exist in OSM but share no intersection
+is210 & foothill blvd,17,street not found in OSM: Foothill Freeway
+is210 & fruit st,13,street not found in OSM: Foothill Freeway
+fulton rd & rr,11,street not found in OSM: Rr
+white ave & rr,11,street not found in OSM: Rr
+canyon view dr & foothill blvd,6,streets exist in OSM but share no intersection
+d st & first st,4,streets exist in OSM but share no intersection
+damien ave & alessandro ave,4,street not found in OSM: Alessandro Avenue
+bas / sta,3,"street not found in OSM: Bas, Sta"
+esperanza dr & canyon crest dr,3,streets exist in OSM but share no intersection
+damien ave & forestdale ave,2,street not found in OSM: Forestdale Avenue
+foo / fal,2,"street not found in OSM: Foo, Fal"
+majella ave & alessandro ave,2,street not found in OSM: Alessandro Avenue
+first st & d st,2,streets exist in OSM but share no intersection
+shemiran st & thrush pl,2,street not found in OSM: Thrush Place
+warm springs ave & bogie dr,2,street not found in OSM: Warm Springs Avenue
+arrow hwy & first st,2,streets exist in OSM but share no intersection
+whi / mck,1,"street not found in OSM: Whi, Mck"
+sycamore dr & towne center dr,1,streets exist in OSM but share no intersection
+esperanza dr & meadow lark dr,1,streets exist in OSM but share no intersection
+esmond & arrow,1,street not found in OSM: Esmond
+fairplex dr & rr,1,street not found in OSM: Rr
+arrow hwy & fair ave.,1,street not found in OSM: Fair Avenue
+is210 / campus,1,"street not found in OSM: Foothill Freeway, Campus"
+forestdale ave & damien ave,1,street not found in OSM: Forestdale Avenue
+sloan dr & trickling creek dr,1,streets exist in OSM but share no intersection
+la verne ave / fulton st,1,street not found in OSM: Fulton Street
+golden hills / hunter trails,1,"street not found in OSM: Golden Hills, Hunter Trails"
+whi / ald,1,"street not found in OSM: Whi, Ald"
+baseline / mountain view,1,street not found in OSM: Mountain View
+bas / liv,1,"street not found in OSM: Bas, Liv"
+foo / garey,1,street not found in OSM: Foo
+arr / gar,1,"street not found in OSM: Arr, Gar"
+mck / whi,1,"street not found in OSM: Mck, Whi"
+is10 / via verde,1,streets exist in OSM but share no intersection
+bonita ave / metropolitan ave,1,street not found in OSM: Metropolitan Avenue
+e st & walnut st,1,streets exist in OSM but share no intersection
+wheeler ave & elmcrest st,1,streets exist in OSM but share no intersection
+wheeler ave & is210,1,street not found in OSM: Foothill Freeway
+monterey / white,1,street not found in OSM: Monterey
+6th st / buena vista av,1,streets exist in OSM but share no intersection
+fruit st & verdana cir,1,street not found in OSM: Verdana Circle
+bixby dr & is210,1,street not found in OSM: Foothill Freeway
+foo / ful,1,"street not found in OSM: Foo, Ful"
+carey ln / la verne ave,1,street not found in OSM: Carey Lane
+a st & rr,1,street not found in OSM: Rr
+arrow hwy / fair ave,1,street not found in OSM: Fair Avenue
+"dam & foothill blvd, lav, 91750",1,street not found in OSM: Dam
+e st & rr,1,street not found in OSM: Rr
+tenth st & b st,1,streets exist in OSM but share no intersection
+citrus ave / puente,1,street not found in OSM: Citrus Avenue
+puente st / citrus ave,1,street not found in OSM: Citrus Avenue
+puente street / 4th avenue,1,street not found in OSM: Fourth Avenue
+williams ave & bowdoin st,1,streets exist in OSM but share no intersection
+winterhaven dr & leaf st,1,street not found in OSM: Leaf Street
+"bixby dr & is210, lav, 91750",1,street not found in OSM: Foothill Freeway
+stephens ranch rd & esperanza dr,1,streets exist in OSM but share no intersection
+wheeler / damien,1,streets exist in OSM but share no intersection
+white ave & gate 9,1,street not found in OSM: Gate 9
+"dam & foo, lav, 91750",1,"street not found in OSM: Dam, Foo"
+durwood wy / white ave,1,street not found in OSM: Durwood Way
+foothill / gary,1,street not found in OSM: Gary
+white & mckindley,1,street not found in OSM: Mckindley
+dune ln & canopy ln,1,street not found in OSM: Canopy Lane
+garey & grevillia,1,street not found in OSM: Grevillia
+arrow / fair,1,street not found in OSM: Fair
+white/gate 9,1,street not found in OSM: Gate 9
+white ave & gate 8,1,street not found in OSM: Gate 8
+arr / carr,1,"street not found in OSM: Arr, Carr"
+sun rose st & arrow hwy,1,streets exist in OSM but share no intersection
+lemonwood st & el dorado dr,0,street not found in OSM: El Dorado Drive
+pacific / vineland,0,"street not found in OSM: Pacific, Vineland"
+citrus / college,0,"street not found in OSM: Citrus, College"
+east puente st / south citrus ave,0,street not found in OSM: Citrus Avenue
+esperanza dr & hunter trl,0,streets exist in OSM but share no intersection
+baseline & st marks,0,street not found in OSM: St Marks

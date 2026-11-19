@@ -2274,3 +2274,151 @@ UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 
 2026-11-17 16:36:44,161 | INFO     | Saved transformed CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs.csv (12681 rows)
 2026-11-17 16:36:44,332 | INFO     | Saved geocoded CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs_geocoded.csv (12681 rows)
 2026-11-17 16:36:44,469 | INFO     | Pipeline completed successfully. Time to completion: 0:02:51.437627
+2026-11-19 10:43:34,464 | CRITICAL | Unhandled exception
+Traceback (most recent call last):
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\http\client.py", line 1428, in getresponse
+    response.begin()
+  File "C:\Users\stm4z\anaconda3\Lib\http\client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\http\client.py", line 292, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\socket.py", line 720, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\ssl.py", line 1251, in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\ssl.py", line 1103, in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\requests\adapters.py", line 667, in send
+    resp = conn.urlopen(
+           ^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connectionpool.py", line 842, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\util\retry.py", line 498, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\util\util.py", line 39, in reraise
+    raise value
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connectionpool.py", line 788, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\urllib3\connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='overpass-api.de', port=443): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\requests\sessions.py", line 637, in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\requests\sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\requests\sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\requests\adapters.py", line 713, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='overpass-api.de', port=443): Read timed out. (read timeout=30)
+2026-11-19 10:45:06,012 | CRITICAL | Unhandled exception
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py", line 333, in geocode_dataframe
+    print(f"Geocode cache saved: {len(cache)} addresses → {cache_path}")
+  File "C:\Users\stm4z\anaconda3\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 33: character maps to <undefined>
+2026-11-19 10:45:21,347 | WARNING  | Dropped coordinates for 1 rows outside the La Verne bounding box
+2026-11-19 10:50:09,150 | INFO     | Pipeline started at 2026-11-19 10:50:09.150770: skip_geocode=False, no_zip=False
+2026-11-19 10:50:09,152 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py --output-csv C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-zip C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip
+2026-11-19 10:50:13,082 | INFO     | Scraper started: output_csv=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_zip=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip, request_delay=0.5s
+2026-11-19 10:50:16,523 | WARNING  | Structural validation failed: PDF index page 3, document 5 is missing expected download_url
+2026-11-19 10:58:39,711 | INFO     | Scraper finished successfully: 13530 rows from 317 PDFs
+2026-11-19 10:58:40,191 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py --input C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-dir C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output --geocode-cache C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\geocode_cache.json
+2026-11-19 10:58:43,701 | INFO     | Transformer started: input=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_dir=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output, skip_geocode=False, allow_validation_failures=False
+2026-11-19 10:58:43,926 | INFO     | Validating 13,530 rows -- target month 2026-10 (cutoff 2026-10-31 23:59:59)
+2026-11-19 10:58:44,374 | WARNING  | Dropped 5 rows missing a required field {'address': 5} -- first incident IDs: ['260300892', '260900614', '261000378', '261001034', '261100536']
+2026-11-19 10:58:44,390 | INFO     | Held back 759 rows after 2026-10-31 (month still in progress)
+2026-11-19 10:58:44,438 | INFO     | Dropped 46 duplicate rows (0.36% of rows, same incident ID logged more than once)
+2026-11-19 10:58:44,454 | INFO     | Row count OK: 1,400 rows in 2026-10 vs 1,342 avg of ['2026-09', '2026-08', '2026-07'] (104%)
+2026-11-19 10:58:44,454 | INFO     | Validation passed: 13,530 rows in, 12,720 rows out
+2026-11-19 10:58:45,129 | INFO     | Saved transformed CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs.csv (12681 rows)
+2026-11-19 11:08:57,211 | INFO     | Saved geocoded CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs_geocoded.csv (12681 rows)
+2026-11-19 11:08:57,440 | INFO     | Pipeline completed successfully. Time to completion: 0:18:48.289635
+2026-11-19 11:48:38,894 | INFO     | Pipeline started at 2026-11-19 11:48:38.894442: skip_geocode=False, no_zip=False
+2026-11-19 11:48:38,900 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py --output-csv C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-zip C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip
+2026-11-19 11:48:43,236 | INFO     | Scraper started: output_csv=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_zip=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip, request_delay=0.5s
+2026-11-19 11:48:46,443 | WARNING  | Structural validation failed: PDF index page 3, document 5 is missing expected download_url
+2026-11-19 11:51:32,623 | INFO     | Scraper finished successfully: 13530 rows from 317 PDFs
+2026-11-19 11:51:32,840 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py --input C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-dir C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output --geocode-cache C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\geocode_cache.json
+2026-11-19 11:51:35,927 | INFO     | Transformer started: input=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_dir=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output, skip_geocode=False, allow_validation_failures=False
+2026-11-19 11:51:35,997 | INFO     | Validating 13,530 rows -- target month 2026-10 (cutoff 2026-10-31 23:59:59)
+2026-11-19 11:51:36,093 | WARNING  | Dropped 5 rows missing a required field {'address': 5} -- first incident IDs: ['260300892', '260900614', '261000378', '261001034', '261100536']
+2026-11-19 11:51:36,100 | INFO     | Held back 759 rows after 2026-10-31 (month still in progress)
+2026-11-19 11:51:36,118 | INFO     | Dropped 46 duplicate rows (0.36% of rows, same incident ID logged more than once)
+2026-11-19 11:51:36,127 | INFO     | Row count OK: 1,400 rows in 2026-10 vs 1,342 avg of ['2026-09', '2026-08', '2026-07'] (104%)
+2026-11-19 11:51:36,127 | INFO     | Validation passed: 13,530 rows in, 12,720 rows out
+2026-11-19 11:51:36,376 | INFO     | Saved transformed CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs.csv (12681 rows)
+2026-11-19 11:51:37,642 | INFO     | Saved geocoded CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs_geocoded.csv (12681 rows)
+2026-11-19 11:51:37,853 | INFO     | Pipeline completed successfully. Time to completion: 0:02:58.959061
+2026-11-19 11:59:51,194 | INFO     | Transformer started: input=raw_scraped.csv, output_dir=., skip_geocode=False, allow_validation_failures=False
+2026-11-19 11:59:51,198 | CRITICAL | Unhandled exception
+Traceback (most recent call last):
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py", line 523, in <module>
+    main()
+  File "C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py", line 483, in main
+    raw = pd.read_csv(args.input, dtype=str).fillna("")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\pandas\io\parsers\readers.py", line 1026, in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\pandas\io\parsers\readers.py", line 620, in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\pandas\io\parsers\readers.py", line 1620, in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\pandas\io\parsers\readers.py", line 1880, in _make_engine
+    self.handles = get_handle(
+                   ^^^^^^^^^^^
+  File "C:\Users\stm4z\anaconda3\Lib\site-packages\pandas\io\common.py", line 873, in get_handle
+    handle = open(
+             ^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'raw_scraped.csv'
+2026-11-19 12:00:18,622 | INFO     | Pipeline started at 2026-11-19 12:00:18.622893: skip_geocode=False, no_zip=False
+2026-11-19 12:00:18,622 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\lvpd_scrape_daily_logs.py --output-csv C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-zip C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip
+2026-11-19 12:00:21,895 | INFO     | Scraper started: output_csv=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_zip=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\lvpd_daily_logs.zip, request_delay=0.5s
+2026-11-19 12:00:27,752 | WARNING  | Structural validation failed: PDF index page 3, document 5 is missing expected download_url
+2026-11-19 12:07:03,257 | INFO     | Scraper finished successfully: 13530 rows from 317 PDFs
+2026-11-19 12:07:03,729 | INFO     | Running command: C:\Users\stm4z\anaconda3\python.exe C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\transform_and_geocode.py --input C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv --output-dir C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output --geocode-cache C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\geocode_cache.json
+2026-11-19 12:07:06,653 | INFO     | Transformer started: input=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\raw_scraped.csv, output_dir=C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output, skip_geocode=False, allow_validation_failures=False
+2026-11-19 12:07:06,732 | INFO     | Validating 13,530 rows -- target month 2026-10 (cutoff 2026-10-31 23:59:59)
+2026-11-19 12:07:07,000 | WARNING  | Dropped 5 rows missing a required field {'address': 5} -- first incident IDs: ['260300892', '260900614', '261000378', '261001034', '261100536']
+2026-11-19 12:07:07,025 | INFO     | Held back 759 rows after 2026-10-31 (month still in progress)
+2026-11-19 12:07:07,091 | INFO     | Dropped 46 duplicate rows (0.36% of rows, same incident ID logged more than once)
+2026-11-19 12:07:07,113 | INFO     | Row count OK: 1,400 rows in 2026-10 vs 1,342 avg of ['2026-09', '2026-08', '2026-07'] (104%)
+2026-11-19 12:07:07,113 | INFO     | Validation passed: 13,530 rows in, 12,720 rows out
+2026-11-19 12:07:07,938 | INFO     | Saved transformed CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs.csv (12681 rows)
+2026-11-19 12:07:12,661 | INFO     | Saved geocoded CSV: C:\Users\stm4z\OneDrive - branchfour.org\Local Data Lab\Repositories\laverne_police_log_dashboard\police_logs_dashboard_work\output\daily_logs_geocoded.csv (12681 rows)
+2026-11-19 12:07:13,123 | INFO     | Pipeline completed successfully. Time to completion: 0:06:54.500133

@@ -19,6 +19,10 @@ Usage:
     # Change when the backfill triggers (defaults: 0.07 share of rows, 50 rows):
     python run_pipeline.py --backfill-threshold 0.05 --backfill-min-count 100
 
+    # Re-download the OpenStreetMap street data used to place intersections
+    # (otherwise it's reused from output/osm_streets.json and refreshed after 30 days):
+    python run_pipeline.py --refresh-osm
+
 Outputs go to ./output/ — copy daily_logs.csv and daily_logs_geocoded.csv
 to the dashboard repo when done.
 
@@ -57,6 +61,7 @@ OUTPUT_DIR = HERE / "output"
 GEOCODED_CSV = OUTPUT_DIR / "daily_logs_geocoded.csv"
 RAW_CSV = OUTPUT_DIR / "raw_scraped.csv"
 GEOCODE_CACHE = OUTPUT_DIR / "geocode_cache.json"
+OSM_STREETS = OUTPUT_DIR / "osm_streets.json"
 LOGGER = get_logger()
 install_exception_logger(LOGGER)
 
@@ -84,6 +89,8 @@ def main() -> None:
                         help="Run the OpenAI backfill if this share of rows lack lat/lon (default 0.07).")
     parser.add_argument("--backfill-min-count", type=int, default=50,
                         help="...or if at least this many rows lack lat/lon (default 50).")
+    parser.add_argument("--refresh-osm", action="store_true",
+                        help="Re-download the OpenStreetMap street data used for intersections (otherwise refreshed after 30 days).")
     parser.add_argument("--no-backfill", action="store_true", help="Skip the OpenAI geocode backfill step.")
     parser.add_argument("--no-zip", action="store_true", help="Skip saving the PDF ZIP archive (saves disk space).")
     parser.add_argument("--allow-validation-failures", action="store_true",
@@ -114,12 +121,14 @@ def main() -> None:
         "--input", str(RAW_CSV),
         "--output-dir", str(OUTPUT_DIR),
         "--geocode-cache", str(GEOCODE_CACHE),
+        "--osm-streets", str(OSM_STREETS),
     ]
     if args.skip_geocode:
         transform_cmd.append("--skip-geocode")
     if args.allow_validation_failures:
         transform_cmd.append("--allow-validation-failures")
-    run(transform_cmd)
+    # Only the first transform run re-downloads the OSM street data; the re-run after the backfill reuses the saved file
+    run(transform_cmd + (["--refresh-osm"] if args.refresh_osm else []))
 
     # Step 3: OpenAI backfill — only when many rows are still missing lat/lon after Census
     if not args.skip_geocode and not args.no_backfill and GEOCODED_CSV.exists():
