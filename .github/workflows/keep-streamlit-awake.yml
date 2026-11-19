@@ -1,0 +1,40 @@
+name: Keep Streamlit app awake
+
+# Streamlit Community Cloud hibernates an app after 12 hours without a viewer. This visits it in a
+# headless browser every 4 hours (and wakes it if it is already asleep).
+#
+# Notes:
+#   - Scheduled workflows only run from the default branch (main).
+#   - GitHub disables scheduled workflows after 60 days with no repository activity; re-enable in the
+#     Actions tab if that happens.
+#   - Set the repository variable STREAMLIT_APP_URL (Settings > Secrets and variables > Actions >
+#     Variables) to override the URL in scripts/keep_alive.py.
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright and Chromium
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Visit the app
+        env:
+          STREAMLIT_APP_URL: ${{ vars.STREAMLIT_APP_URL || 'https://lavernepolicelogdashboard.streamlit.app/' }}
+        run: python scripts/keep_alive.py
