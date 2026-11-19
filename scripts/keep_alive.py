@@ -20,6 +20,7 @@ import sys
 import time
 from datetime import datetime
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
@@ -27,6 +28,7 @@ from playwright.sync_api import sync_playwright
 DEFAULT_URL = "https://lavernepolicelogdashboard.streamlit.app/"
 WAKE_BUTTON_TEXT = "get this app back up"   # "Yes, get this app back up!"
 APP_READY_TEXT = "Disclaimer"               # heading at the bottom of app.py, so the whole script ran
+APP_TITLE_TEXT = "La Verne Police Incidents"  # app title, shown as soon as the app starts rendering
 LOAD_TIMEOUT_MS = 120_000                   # a cold start can take a minute or two
 STAY_CONNECTED_MS = 30_000                  # stay on the app this long once it has loaded, then exit
 ATTEMPTS = 3
@@ -48,16 +50,21 @@ def wake_if_asleep(page: Page) -> bool:
 
 
 def app_loaded(page: Page) -> bool:
-    """Wait for the app's own content (not the wake-up page or a loading shell)."""
-    try:
-        page.wait_for_function(
-            "text => document.body && document.body.innerText.includes(text)",
-            arg=APP_READY_TEXT,
-            timeout=LOAD_TIMEOUT_MS,
-        )
-        return True
-    except PlaywrightTimeout:
-        return False
+    """Wait for the app's own content (not the wake-up page or a loading shell).
+
+    Streamlit Community Cloud serves the app inside an iframe, so check every frame, not just the outer page.
+    """
+    deadline = time.time() + LOAD_TIMEOUT_MS / 1000
+    while time.time() < deadline:
+        for frame in page.frames:
+            try:
+                if frame.locator("text=" + APP_READY_TEXT).first.is_visible(timeout=500) or \
+                   frame.locator("text=" + APP_TITLE_TEXT).first.is_visible(timeout=500):
+                    return True
+            except PlaywrightError:
+                pass  # frame navigated or detached mid-check; try again
+        page.wait_for_timeout(2_000)
+    return False
 
 
 def visit(url: str) -> bool:
