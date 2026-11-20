@@ -237,7 +237,10 @@ else:
             width="stretch",  # fill the screen width on a phone
             height=420,       # leaves room on a phone to scroll past the map
         )
-        st.caption(f"Note: Only incidents with full addresses are mapped. {len(fdf) - len(map_df):,} incidents are missing full addresses and are not mapped.")
+        st.caption(
+            f"Note: Only incidents with full addresses are mapped. {len(fdf) - len(map_df):,} incidents are missing full addresses and are not mapped. "
+            "Map locations are generated approximations and may not reflect the actual location of an incident. "
+                  )
     else:
         st.info("Map unavailable — run `geocode_neighborhoods.py` then `geocode_census_fallback.py` to add coordinates.")
 
