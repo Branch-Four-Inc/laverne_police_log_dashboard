@@ -127,8 +127,8 @@ address_query = st.sidebar.text_input(
 
 st.sidebar.markdown("**Incident Type**")
 btn_all, btn_none = st.sidebar.columns(2)
-btn_none.button("Clear all", on_click=_clear_all_types, use_container_width=True)
-btn_all.button("Select all", on_click=_select_all_types, use_container_width=True)
+btn_none.button("Clear all", on_click=_clear_all_types, width="stretch")
+btn_all.button("Select all", on_click=_select_all_types, width="stretch")
 selected = st.sidebar.multiselect(
     "Incident Type",
     natures,
@@ -152,22 +152,25 @@ if address_query:
     fdf = fdf[fdf["address_lc"].str.contains(address_query.strip().lower(), regex=False)]
 
 st.title("La Verne Police Log Dashboard")
-st.caption("Explore incidents reported to the La Verne Police Department. Use the filters in the sidebar to narrow what you see.")
+fmt_date = lambda d: f"{d:%b} {d.day}, {d:%Y}"  # "Jan 3, 2026" (no zero-padded day, works on Windows too)
+st.subheader(f"{fmt_date(start)} – {fmt_date(end)}")
+st.caption("Explore incidents reported to the La Verne Police Department. Use the filters in the left sidebar to narrow what you see.")
 
 # ── Incidents summary ─────────────────────────────────────────────────────────
 # Built from the filtered dataset (`fdf`), so it updates with the sidebar filters.
 with st.container(border=True):
-    head_col, reset_col = st.columns([5, 1], vertical_alignment="center")
-    head_col.subheader("Summary")
-    #head_col.caption("Reflects the current filters.")
-    reset_col.button("Reset all filters", on_click=_reset_all_filters, use_container_width=True)
+    #fmt_date = lambda d: f"{d:%b} {d.day}, {d:%Y}"  # "Jan 3, 2026" (no zero-padded day, works on Windows too)
+    st.subheader("Summary")
+    #st.caption("Reflects the current filters.")
 
     sum_cols = st.columns(3)
     sum_cols[0].metric(f"Filtered Incidents from {len(df):,} Total", f"{len(fdf):,}")
     if len(fdf):
-        n_days = fdf["log_day"].nunique()
-        busiest_dow = fdf["dow"].value_counts().idxmax()
-        busiest_hour = HOUR_LABELS[int(fdf["hour"].value_counts().idxmax())]
+        n_days = df["log_day"].nunique()  # every day in the data, not just days with filtered incidents
+        # The single busiest day-of-week + hour combination (the darkest cell in the heatmap below),
+        # not the busiest day and the busiest hour picked separately
+        busiest_dow, busiest_hour_num = fdf.groupby(["dow", "hour"], observed=True).size().idxmax()
+        busiest_hour = HOUR_LABELS[int(busiest_hour_num)]
         sum_cols[1].metric("Average per Day", f"{len(fdf) / n_days:,.1f}")
         sum_cols[2].metric("Busiest Day & Hour", f"{busiest_dow}, {busiest_hour}")
 
@@ -186,7 +189,10 @@ with st.container(border=True):
         st.markdown("**Top 3 Incident Types**")
         st.caption("—")
 
-# With no matching incidents every chart would be empty, so show one message instead
+_, reset_col = st.columns([4, 1])
+reset_col.button("Reset all filters", on_click=_reset_all_filters, width="stretch")
+
+# With no matching incidents every chart would be empty, so show one message instead    
 has_rows = len(fdf) > 0
 if not has_rows:
     st.warning("No incidents match the current filters. Try widening the date range, selecting more incident types, or clearing the address search.")
@@ -197,12 +203,14 @@ else:
         map_df = fdf.dropna(subset=["lat", "lon"])[["lat", "lon", "color", "date", "grouped_nature", "incident_address"]]
     
         st.subheader("Incident Map")
-        st.caption("The Incident Map shows where reported incidents occurred. Hover over an incident on the map to see more information.")
+        st.caption("The Incident Map shows where reported incidents occurred. Hover over (or tap) an incident on the map to see more information. Pinch or use two fingers to zoom.")
         # pydeck has no built-in legend, so draw one with HTML: a colored dot per incident type
-        # that is actually on the map right now (uses the same colors as the map layer)
+        # that is actually on the map right now (uses the same colors as the map layer).
+        # Collapsed in an expander: with 30+ types it is very tall on a phone and would push the map off-screen.
         present_set = set(map_df["grouped_nature"].unique())
         present = [n for n in natures if n in present_set]
-        st.markdown(legend_html(present), unsafe_allow_html=True)
+        with st.expander("Map Legend (incident type colors)"):
+            st.markdown(legend_html(present), unsafe_allow_html=True)
         st.pydeck_chart(
             pdk.Deck(
                 initial_view_state=pdk.ViewState(latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=13),
@@ -213,12 +221,21 @@ else:
                         get_position=["lon", "lat"],
                         get_fill_color="color",
                         get_radius=28,
+                        radius_min_pixels=6,   # big enough to tap on a phone even when zoomed out
+                        radius_max_pixels=14,
                         pickable=True,
                     )
                 ],
-                tooltip={"text": "{date}\n{grouped_nature}\n{incident_address}"},
+                tooltip={
+                    "html": "<b>{grouped_nature}</b><br/>{date}<br/>{incident_address}",
+                    "style": {"fontSize": "14px", "maxWidth": "240px", "whiteSpace": "normal"},
+                },
                 map_style="light",
-            )
+                # A flat, north-up map: no accidental rotate/tilt when pinching to zoom on a phone
+                views=[pdk.View(type="MapView", controller={"dragRotate": False, "touchRotate": False})],
+            ),
+            width="stretch",  # fill the screen width on a phone
+            height=420,       # leaves room on a phone to scroll past the map
         )
         st.caption(f"Note: Only incidents with full addresses are mapped. {len(fdf) - len(map_df):,} incidents are missing full addresses and are not mapped.")
     else:
@@ -264,18 +281,30 @@ else:
             # Plotly can't lay a legend out in columns and scrolls (or stretches the chart) with 30+
             # entries, so hide it and show the compact wrapping legend above the chart instead.
             fig.update_layout(showlegend=False)
-            st.markdown(legend_html([n for n in natures if n in set(daily["grouped_nature"])]), unsafe_allow_html=True)
+            # In an expander (like the map's legend): 30+ types is very tall on a phone and pushes the chart down
+            with st.expander("Chart Legend (incident type colors)"):
+                st.markdown(legend_html([n for n in natures if n in set(daily["grouped_nature"])]), unsafe_allow_html=True)
         # Tick labels adapt to the zoom level: days when the range is short, months when it's long.
         # (dtickrange is the tick spacing in milliseconds; "M1" etc. are month steps.)
         fig.update_xaxes(
             tickformatstops=[
-                dict(dtickrange=[None, 7 * 86400000], value="%B %d, %Y"),   # up to ~weekly ticks
-                dict(dtickrange=[7 * 86400000, "M1"], value="%B %d"),       # weekly to monthly ticks
-                dict(dtickrange=["M1", None], value="%B %Y"),               # monthly or wider
+                # short month names so labels don't overlap on a narrow screen
+                dict(dtickrange=[None, 7 * 86400000], value="%b %d"),       # up to ~weekly ticks
+                dict(dtickrange=[7 * 86400000, "M1"], value="%b %d"),       # weekly to monthly ticks
+                dict(dtickrange=["M1", None], value="%b %Y"),               # monthly or wider
             ],
             hoverformat="%A, %B %d, %Y",  # hovering always shows the full date, e.g. "Monday, April 06, 2026"
+            nticks=6,                     # fewer ticks, so they fit on a phone
+            title=None,                   # the date axis is obvious; saves vertical space
         )
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_yaxes(fixedrange=True)  # no vertical zoom, so a vertical swipe scrolls the page on touch screens
+        # Legend (Daily / 7-day avg) in a row above the plot; the top margin makes room for it
+        fig.update_layout(
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text=""),
+            margin=dict(t=40, b=10, l=10, r=10),
+        )
+        # The toolbar (zoom, pan, download) is cramped and hard to use on a phone
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     daily_chart(fdf)
 
@@ -298,30 +327,54 @@ else:
         category_orders={"hour_label": HOUR_LABELS, "dow": DOW_ORDER},
         labels={"hour_label": "Hour of Day", "dow": "", "count": "Incidents"},
     )
-    fig_heat.update_layout(height=320, margin=dict(t=10, b=10))
-    st.plotly_chart(fig_heat, use_container_width=True)
+    fig_heat.update_layout(
+        height=320,
+        margin=dict(t=10, b=10, l=10, r=10),
+        coloraxis_colorbar=dict(thickness=12, len=0.9, title=dict(text="")),  # slimmer color bar leaves more room for the grid
+    )
+    # 24 hour labels don't fit on a phone: label every 3rd hour (hovering a cell still shows its exact hour)
+    fig_heat.update_xaxes(
+        tickmode="array", tickvals=HOUR_LABELS[::3], ticktext=HOUR_LABELS[::3], tickangle=0,
+        title=None, fixedrange=True,
+    )
+    fig_heat.update_yaxes(fixedrange=True)  # a 7 x 24 grid has nothing to zoom into; lets a swipe scroll the page on touch
+    st.plotly_chart(fig_heat, width="stretch", config={"displayModeBar": False})
 
 
 
     # ── Table ────────────────────────────────────────────────────────────────
     st.subheader("Search Incidents")
-    st.caption("The table lists the filtered incidents.")
+    st.caption("The table lists the filtered incidents. Tap a column heading to sort, and swipe sideways to see every column.")
 
-    table_df = fdf[['reported', 'grouped_nature', 'nature_description', 'incident_address']].rename({'reported': 'Report Date', 
+    table_df = fdf[['reported', 'grouped_nature', 'nature', 'incident_address']].rename({'reported': 'Report Date', 
                       'grouped_nature': 'Incident Type', 
-                      'nature_description': 'Description', 
+                      'nature': 'Code',
                       'incident_address': 'Address'}, axis = 1)
 
 
 
-    table_df = table_df[['Report Date', 'Incident Type', 'Description', 'Address']].reset_index(drop = True)
+    # Address before Description: on a narrow screen the first columns are all you see without swiping,
+    # and the address is more useful than the long description
+    table_df = table_df[['Report Date', 'Incident Type', 'Code', 'Address']].reset_index(drop = True)
+
+    # The raw codes are lowercase ("disturb noise"): capitalize the first letter of every word.
+    # str.title() would turn "don't" into "Don'T", so lowercase any letter right after an apostrophe.
+    table_df["Code"] = (
+        table_df["Code"].astype(str).str.upper()
+    )
 
     st.dataframe(
         table_df,
-        height=600,
-        use_container_width=True,
+        height=420,  # shorter than a phone screen, so a swipe outside the table can still scroll the page
+        width="stretch",
         hide_index=True,
-        column_config={"Report Date": st.column_config.DatetimeColumn("Report Date", format="MMM D, YYYY h:mm a")},
+        column_config={
+            # compact widths so more fits on screen before sideways scrolling
+            "Report Date": st.column_config.DatetimeColumn("Report Date", format="MMM D, YYYY h:mm a", width="medium"),
+            "Incident Type": st.column_config.TextColumn("Incident Type", width="medium"),
+            "Code": st.column_config.TextColumn("Code", width="medium"),
+            "Address": st.column_config.TextColumn("Address", width="medium"),
+        },
     )
 
 
@@ -345,7 +398,7 @@ assist = assist.rename({'reported': 'Report Date',
                   'lat': 'Latitude', 
                   'lon': 'Longitude'}, axis = 1)
 
-with st.expander("View Assist Agency Calls"):
+with st.expander("Assist Agency Calls"):
     st.caption('''
         The table lists all Assist Agency Calls. 'Assist Agency' are incidents where the La Verne police department 
         assists a nearby police department with an incident, or a nearby police department assists La Verne PD with an incident.
@@ -355,7 +408,7 @@ with st.expander("View Assist Agency Calls"):
     )
     st.dataframe(
         assist[["Report Date", "Address", "Latitude", "Longitude"]].sort_values("Report Date", ascending=False),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     st.caption(f"{len(assist):,} Assist Agency calls in the selected date range ({assist['Latitude'].notna().sum():,} geocoded)")
@@ -366,8 +419,8 @@ with st.expander("View Assist Agency Calls"):
 data_dict = load_data_dictionary()
 
 
-with st.expander("View Data Dictionary"):
-    st.dataframe(data_dict, hide_index=True, use_container_width=True)
+with st.expander("Data Dictionary"):
+    st.dataframe(data_dict, hide_index=True, width="stretch")
 
 # --- IMPORTANT TEXT AT BOTTOM ----------------------------------------------------
 #with st.expander("About this data", expanded=True):
