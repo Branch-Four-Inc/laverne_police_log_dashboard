@@ -340,9 +340,9 @@ else:
             orientation="h",
             yref="paper", yanchor="bottom", y=1.0,
             xref="paper", xanchor="left", x=0,
-            lenmode="pixels", len=220, thickness=10,
+            lenmode="pixels", len=320, thickness=10,
             ticklabelposition="outside top",
-            title=dict(text="Number ofIncidents", side="right"),
+            title=dict(text="Number of Incidents", side="right"),
         ),
     )
     # 24 hour labels don't fit on a phone: label every 3rd hour (hovering a cell still shows its exact hour)
