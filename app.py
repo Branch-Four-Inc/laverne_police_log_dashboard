@@ -213,7 +213,7 @@ else:
             st.markdown(legend_html(present), unsafe_allow_html=True)
         st.pydeck_chart(
             pdk.Deck(
-                initial_view_state=pdk.ViewState(latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=13),
+                initial_view_state=pdk.ViewState(latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=12),
                 layers=[
                     pdk.Layer(
                         "ScatterplotLayer",
@@ -340,14 +340,14 @@ else:
             orientation="h",
             yref="paper", yanchor="bottom", y=1.0,
             xref="paper", xanchor="left", x=0,
-            lenmode="pixels", len=320, thickness=10,
+            lenmode="pixels", len=280, thickness=10,
             ticklabelposition="outside top",
-            title=dict(text="Number of Incidents", side="right"),
+            title=dict(text="Total Incidents", side="right"),
         ),
     )
-    # 24 hour labels don't fit on a phone: label every 3rd hour (hovering a cell still shows its exact hour)
+    # 24 hour labels don't fit on a phone: label every 4th hour (hovering a cell still shows its exact hour)
     fig_heat.update_xaxes(
-        tickmode="array", tickvals=HOUR_LABELS[::3], ticktext=HOUR_LABELS[::3], tickangle=0,
+        tickmode="array", tickvals=HOUR_LABELS[::4], ticktext=HOUR_LABELS[::4], tickangle=0,
         title=None, fixedrange=True,
     )
     fig_heat.update_yaxes(fixedrange=True)  # a 7 x 24 grid has nothing to zoom into; lets a swipe scroll the page on touch
@@ -357,7 +357,7 @@ else:
 
     # ── Table ────────────────────────────────────────────────────────────────
     st.subheader("Search Incidents")
-    st.caption("The table lists the filtered incidents. Tap a column heading to sort, and swipe sideways to see every column.")
+    st.caption("The table lists the filtered incidents. Tap a column heading to sort, and scroll sideways to see every column.")
 
     table_df = fdf[['reported', 'grouped_nature', 'nature', 'incident_address']].rename({'reported': 'Report Date', 
                       'grouped_nature': 'Incident Type', 
