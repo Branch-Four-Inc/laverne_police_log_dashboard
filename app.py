@@ -270,7 +270,7 @@ else:
             daily["rolling_7"] = daily["count"].rolling(7, min_periods=1).mean()
             fig = px.line(daily, x="log_date", y="count", labels={"log_date": "Date", "count": "Incidents"})
             fig.update_traces(line=dict(color="#c8d8e8", width=1), name="Daily")
-            fig.add_scatter(x=daily["log_date"], y=daily["rolling_7"], name="7-day avg", line=dict(color="#1a4a8a", width=2.5))
+            fig.add_scatter(x=daily["log_date"], y=daily["rolling_7"], name="7-day Average", line=dict(color="#1a4a8a", width=2.5))
 
         fig.update_layout(height=350, margin=dict(t=10, b=10))
         if not breakdown:
@@ -297,13 +297,16 @@ else:
             nticks=6,                     # fewer ticks, so they fit on a phone
             title=None,                   # the date axis is obvious; saves vertical space
         )
-        fig.update_yaxes(fixedrange=True)  # no vertical zoom, so a vertical swipe scrolls the page on touch screens
+        # No zooming or panning on either axis (also lets a swipe over the chart scroll the page on touch screens)
+        fig.update_xaxes(fixedrange=True)
+        fig.update_yaxes(fixedrange=True)
+        fig.update_layout(dragmode=False)
         # Legend (Daily / 7-day avg) in a row above the plot; the top margin makes room for it
         fig.update_layout(
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text=""),
             margin=dict(t=40, b=10, l=10, r=10),
         )
-        # The toolbar (zoom, pan, download) is cramped and hard to use on a phone
+        # The toolbar (download, zoom buttons) is cramped on a phone, and zooming is turned off anyway
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     daily_chart(fdf)
@@ -329,8 +332,18 @@ else:
     )
     fig_heat.update_layout(
         height=320,
-        margin=dict(t=10, b=10, l=10, r=10),
-        coloraxis_colorbar=dict(thickness=12, len=0.9, title=dict(text="")),  # slimmer color bar leaves more room for the grid
+        margin=dict(t=50, b=10, l=10, r=10),  # top margin leaves room for the color bar legend
+        dragmode=False,
+        # Color bar legend as a short horizontal bar above the grid. Its numbers go above the bar too
+        # ("outside top"), otherwise they would land on top of the grid.
+        coloraxis_colorbar=dict(
+            orientation="h",
+            yref="paper", yanchor="bottom", y=1.0,
+            xref="paper", xanchor="left", x=0,
+            lenmode="pixels", len=220, thickness=10,
+            ticklabelposition="outside top",
+            title=dict(text="Number ofIncidents", side="right"),
+        ),
     )
     # 24 hour labels don't fit on a phone: label every 3rd hour (hovering a cell still shows its exact hour)
     fig_heat.update_xaxes(
